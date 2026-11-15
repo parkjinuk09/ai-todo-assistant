@@ -21,4 +21,6 @@ export const api = {
   chatHistory: () => request("/chat"),
   sendChat: (message) => request("/chat", { method: "POST", body: { message } }),
   briefing: () => request("/briefing"),
+  monthlyReport: (month, regenerate = false) =>
+    request(`/reports/monthly?month=${month}${regenerate ? "&regenerate=true" : ""}`),
 };
