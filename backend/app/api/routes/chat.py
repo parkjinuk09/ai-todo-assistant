@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Response
@@ -12,6 +13,7 @@ from app.schemas.chat import BriefingOut, ChatIn, ChatMessageOut, ChatOut
 from app.services import ai_agent, todo_service
 
 router = APIRouter(tags=["chat"])
+logger = logging.getLogger(__name__)
 
 
 @router.post("/chat", response_model=ChatOut)
@@ -22,6 +24,7 @@ def chat(body: ChatIn, db: Session = Depends(get_db)):
         raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:  # 외부 API 오류는 502로 감싼다
         db.rollback()
+        logger.error("LLM call failed: %s: %s", e.__class__.__name__, str(e)[:500])
         raise HTTPException(status_code=502, detail=f"AI 호출 실패: {e.__class__.__name__}")
     return ChatOut(reply=reply, actions=actions, todos=todo_service.list_todos(db))
 
