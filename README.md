@@ -8,7 +8,7 @@
 ## 주요 기능
 | 기능 | 설명 |
 |---|---|
-| 💬 **AI 비서** | "내일 3시까지 OS 과제 넣어줘" → Gemini function calling으로 투두 생성·수정·완료·삭제 |
+| 💬 **AI 비서** | "내일 3시까지 OS 과제 넣어줘" → LLM tool calling(Vercel AI Gateway)으로 투두 생성·수정·완료·삭제 |
 | 📋 **투두** | 마감일, 카테고리, 우선순위, 필터 |
 | ☀️ **오늘 브리핑** | 밀린 일 / 오늘 마감 + AI 추천 순서 |
 | 📊 **월간 리포트** | 완료율, 마감 준수, 요일·카테고리 통계 + AI 회고. 지난 달은 확정 저장 |
@@ -18,7 +18,7 @@
 | 영역 | 기술 |
 |---|---|
 | Backend | FastAPI, SQLAlchemy 2.0, Pydantic v2, PostgreSQL 16 (JSONB), Redis 7 |
-| AI | Google Gemini API (function calling) |
+| AI | Vercel AI Gateway (OpenAI 호환 API, tool calling, 기본 모델 `google/gemini-2.5-flash-lite`) |
 | Frontend | React 19, Vite, Tailwind CSS v4, vite-plugin-pwa |
 | Test | pytest (15), fakeredis, k6 |
 | CI | GitHub Actions (pytest → 프론트 빌드 → k6 smoke) |
@@ -32,7 +32,7 @@
                         └── models/schemas
                               │
               ┌───────────────┼───────────────┐
-         PostgreSQL         Redis         Gemini API
+         PostgreSQL         Redis         AI Gateway
 ```
 - AI 도구와 REST API가 **같은 서비스 레이어**를 호출 → 검증·캐시 무효화 규칙이 하나.
 
@@ -51,7 +51,7 @@ docker compose up -d                       # Postgres :5433, Redis :6380
 
 cd backend
 python3.11 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
-cp .env.example .env                       # GEMINI_API_KEY 입력 (https://aistudio.google.com)
+cp .env.example .env                       # AI_GATEWAY_API_KEY 입력 (Vercel 대시보드 → AI Gateway)
 .venv/bin/uvicorn app.main:app --reload    # http://localhost:8000/docs
 
 cd ../frontend
@@ -63,7 +63,7 @@ npm run dev                                # http://localhost:5173
 ## 배포 (Vercel, 무료 티어)
 | 대상 | 서비스 | 설정 |
 |---|---|---|
-| API | Vercel Python (FastAPI, root: `backend`, 엔트리 `index.py`) | `GEMINI_API_KEY`, `CORS_ORIGINS` |
+| API | Vercel Python (FastAPI, root: `backend`, 엔트리 `index.py`) | `CORS_ORIGINS` (AI는 OIDC로 자동 인증) |
 | DB | Neon (Vercel Marketplace) | `DATABASE_URL` 자동 주입 |
 | Cache | Upstash Redis (Vercel Marketplace) | `KV_URL` 자동 주입 (`REDIS_URL`도 인식) |
 | Web | Vercel (root: `frontend`, Vite) | `VITE_API_URL` |
@@ -77,6 +77,7 @@ npm run dev                                # http://localhost:5173
 | 01 | [MVP](docs/dev-log/01-mvp.md) | 레이어드 구조, LLM 도구 설계, 장애 격리 |
 | 02 | [월간 리포트](docs/dev-log/02-monthly-report.md) | SQL 집계(FILTER/CASE), JSONB 확정 저장 |
 | 03 | [Redis + k6](docs/dev-log/03-redis-k6.md) | 1차 실패 원인 분석, 바이트 캐싱, UPSERT, stampede 락 |
+| 04 | [LLM 제공자 전환](docs/dev-log/04-ai-gateway.md) | Gemini SDK → AI Gateway, 수동 tool loop, OIDC 인증 |
 
 포트폴리오 요약: [docs/PORTFOLIO.md](docs/PORTFOLIO.md)
 
