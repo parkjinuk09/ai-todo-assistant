@@ -61,3 +61,12 @@ def test_current_month_not_saved(client):
 def test_invalid_month(client):
     assert client.get("/reports/monthly?month=2025-13").status_code == 422
     assert client.get("/reports/monthly?month=2999-01").status_code == 422
+
+
+def test_upsert_is_idempotent():
+    db = SessionLocal()
+    report_service._upsert_report(db, "2025-01", {"a": 1}, "first")
+    report_service._upsert_report(db, "2025-01", {"a": 2}, "second")
+    rows = db.query(MonthlyReport).all()
+    assert len(rows) == 1 and rows[0].ai_comment == "second"
+    db.close()

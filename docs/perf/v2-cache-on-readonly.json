@@ -1,0 +1,23 @@
+{
+  "label": "v2-cache-on-readonly",
+  "rps": "864.3",
+  "requests": 25957,
+  "failed_rate": 0,
+  "all": {
+    "avg": "57.8",
+    "p95": "77.3",
+    "max": "329.0"
+  },
+  "todos": {
+    "avg": "61.1",
+    "p95": "78.6",
+    "max": "300.6"
+  },
+  "report": {
+    "avg": "49.8",
+    "p95": "72.3",
+    "max": "329.0"
+  },
+  "cache_hit": 25953,
+  "cache_miss": 4
+}

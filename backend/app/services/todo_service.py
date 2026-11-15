@@ -1,13 +1,18 @@
 from datetime import datetime, time, timedelta
 
 from fastapi import HTTPException
+from pydantic import TypeAdapter
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import cache
 from app.core.config import settings
 from app.models import Todo
 from app.models.todo import utcnow
-from app.schemas.todo import TodoCreate, TodoUpdate
+from app.schemas.todo import TodoCreate, TodoOut, TodoUpdate
+
+LIST_TTL = 60
+_todo_list = TypeAdapter(list[TodoOut])
 
 
 def list_todos(db: Session, done: bool | None = None) -> list[Todo]:
@@ -17,6 +22,14 @@ def list_todos(db: Session, done: bool | None = None) -> list[Todo]:
     # 미완료 → 마감 임박 → 우선순위 순
     stmt = stmt.order_by(Todo.done, Todo.due_at.is_(None), Todo.due_at, Todo.priority, Todo.id)
     return list(db.scalars(stmt))
+
+
+def list_todos_cached(db: Session, done: bool | None = None) -> tuple[bytes, str]:
+    key = cache.versioned(f"todos:list:{done}")
+    return cache.get_or_set_raw(
+        key, LIST_TTL,
+        lambda: _todo_list.dump_json([TodoOut.model_validate(t) for t in list_todos(db, done)]),
+    )
 
 
 def get_todo(db: Session, todo_id: int) -> Todo:
@@ -31,6 +44,7 @@ def create_todo(db: Session, data: TodoCreate) -> Todo:
     db.add(todo)
     db.commit()
     db.refresh(todo)
+    cache.bump_version()
     return todo
 
 
@@ -43,12 +57,14 @@ def update_todo(db: Session, todo_id: int, data: TodoUpdate) -> Todo:
         setattr(todo, key, value)
     db.commit()
     db.refresh(todo)
+    cache.bump_version()
     return todo
 
 
 def delete_todo(db: Session, todo_id: int) -> None:
     db.delete(get_todo(db, todo_id))
     db.commit()
+    cache.bump_version()
 
 
 def today_range() -> tuple[datetime, datetime]:

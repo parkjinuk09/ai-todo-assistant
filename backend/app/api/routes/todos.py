@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -10,7 +10,9 @@ router = APIRouter(prefix="/todos", tags=["todos"])
 
 @router.get("", response_model=list[TodoOut])
 def list_todos(done: bool | None = None, db: Session = Depends(get_db)):
-    return todo_service.list_todos(db, done)
+    # 이미 직렬화된 바이트를 그대로 반환 (response_model 재검증 생략)
+    body, status_ = todo_service.list_todos_cached(db, done)
+    return Response(body, media_type="application/json", headers={"X-Cache": status_})
 
 
 @router.post("", response_model=TodoOut, status_code=status.HTTP_201_CREATED)

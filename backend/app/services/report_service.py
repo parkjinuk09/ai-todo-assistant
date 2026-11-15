@@ -11,6 +11,7 @@ from fastapi import HTTPException
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.orm import Session
 
+from app.core import cache
 from app.core.config import settings
 from app.models import MonthlyReport, Todo
 from app.models.todo import utcnow
@@ -106,6 +107,24 @@ def ai_comment(month: str, stats: ReportStats) -> str:
                 f"{stats.best_weekday or '-'}요일에 제일 열심히 했어!")
 
 
+CURRENT_TTL = 300        # 이번 달: 5분 (쓰기 시 버전 무효화)
+FINAL_TTL = 60 * 60 * 24  # 지난 달 확정본: 1일
+
+
+def get_monthly_report_cached(db: Session, month: str | None = None,
+                              regenerate: bool = False) -> tuple[bytes, str]:
+    month = month or current_month()
+    month_range(month)
+    final_key = f"report:final:{month}"
+    if regenerate:
+        cache.delete(final_key)
+        return get_monthly_report(db, month, regenerate=True).model_dump_json().encode(), "BYPASS"
+
+    key = final_key if month < current_month() else cache.versioned(f"report:{month}")
+    return cache.get_or_set_raw(key, FINAL_TTL if month < current_month() else CURRENT_TTL,
+                                lambda: get_monthly_report(db, month).model_dump_json().encode())
+
+
 def get_monthly_report(db: Session, month: str | None = None, regenerate: bool = False) -> ReportOut:
     month = month or current_month()
     month_range(month)  # 형식 검증
@@ -122,13 +141,25 @@ def get_monthly_report(db: Session, month: str | None = None, regenerate: bool =
     comment = ai_comment(month, stats)
 
     if finalized:  # 지난 달만 확정본으로 저장
-        if saved is None:
-            saved = MonthlyReport(month=month)
-            db.add(saved)
-        saved.stats, saved.ai_comment, saved.generated_at = stats.model_dump(), comment, utcnow()
-        db.commit()
+        _upsert_report(db, month, stats.model_dump(), comment)
 
     return ReportOut(month=month, stats=stats, ai_comment=comment, generated_at=utcnow(), finalized=finalized)
+
+
+def _upsert_report(db: Session, month: str, stats: dict, comment: str) -> None:
+    """동시 요청이 같은 달을 처음 생성해도 UniqueViolation이 나지 않도록 INSERT ... ON CONFLICT."""
+    if db.bind.dialect.name == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+    else:
+        from sqlalchemy.dialects.sqlite import insert
+    values = {"month": month, "stats": stats, "ai_comment": comment, "generated_at": utcnow()}
+    stmt = insert(MonthlyReport).values(**values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=[MonthlyReport.month],
+        set_={k: stmt.excluded[k] for k in ("stats", "ai_comment", "generated_at")},
+    )
+    db.execute(stmt)
+    db.commit()
 
 
 def list_saved_months(db: Session) -> list[str]:
