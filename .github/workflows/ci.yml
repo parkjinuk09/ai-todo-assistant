@@ -21,3 +21,34 @@ jobs:
         with: { node-version: 22, cache: npm, cache-dependency-path: frontend/package-lock.json }
       - run: npm ci
       - run: npm run build
+  k6-smoke:
+    needs: backend
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: todo, POSTGRES_PASSWORD: todo, POSTGRES_DB: todo }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+    env:
+      DATABASE_URL: postgresql://todo:todo@localhost:5432/todo
+      REDIS_URL: redis://localhost:6379/0
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11" }
+      - run: pip install -r backend/requirements.txt
+      - name: seed & start api
+        working-directory: backend
+        run: |
+          python -m scripts.seed 500
+          nohup uvicorn app.main:app --port 8000 > api.log 2>&1 &
+          sleep 5 && curl -sf localhost:8000/health
+      - uses: grafana/setup-k6-action@v1
+      - run: k6 run -e VUS=10 -e DURATION=15s -e LABEL=ci-smoke k6/load-test.js
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: k6-ci-smoke, path: k6/results/ci-smoke.json }

@@ -8,6 +8,7 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./local.db"
     redis_url: str = ""
+    cache_enabled: bool = True
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"
     cors_origins: str = "*"

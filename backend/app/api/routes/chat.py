@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException
+from datetime import datetime
+
+from fastapi import APIRouter, Depends, HTTPException, Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.core import cache
+from app.core.config import settings
 from app.core.database import get_db
 from app.models import ChatMessage
 from app.schemas.chat import BriefingOut, ChatIn, ChatMessageOut, ChatOut
@@ -28,8 +32,18 @@ def chat_history(limit: int = 50, db: Session = Depends(get_db)):
     return list(reversed(list(rows)))
 
 
+BRIEFING_TTL = 600
+
+
 @router.get("/briefing", response_model=BriefingOut)
 def briefing(db: Session = Depends(get_db)):
+    """LLM 호출이 들어가는 가장 비싼 조회 → 투두가 안 바뀌었으면 10분간 캐시."""
+    key = cache.versioned(f"briefing:{datetime.now(settings.tz).date()}")
+    body, status_ = cache.get_or_set_raw(key, BRIEFING_TTL, lambda: _build_briefing(db).model_dump_json().encode())
+    return Response(body, media_type="application/json", headers={"X-Cache": status_})
+
+
+def _build_briefing(db: Session) -> BriefingOut:
     overdue, today = todo_service.briefing_buckets(db)
     pending = todo_service.list_todos(db, done=False)
     if not pending:
