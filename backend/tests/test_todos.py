@@ -28,3 +28,24 @@ def test_briefing_fallback(client):
     client.post("/todos", json={"title": "밀린 일", "due_at": "2020-01-01T00:00:00+09:00"})
     body = client.get("/briefing").json()
     assert len(body["overdue"]) == 1 and body["summary"]
+
+
+def test_web_dist_is_served_after_api_routes(tmp_path, monkeypatch):
+    """WEB_DIST를 주면 / 에서 프론트를, API 경로는 그대로 API를 준다."""
+    import importlib
+
+    from fastapi.testclient import TestClient
+
+    import app.main as main_module
+    from app.core import config
+
+    (tmp_path / "index.html").write_text("<p>web</p>")
+    monkeypatch.setattr(config.settings, "web_dist", str(tmp_path))
+    reloaded = importlib.reload(main_module)
+    try:
+        c = TestClient(reloaded.app)
+        assert "web" in c.get("/").text
+        assert c.get("/health").json()["status"] == "ok"
+    finally:
+        monkeypatch.setattr(config.settings, "web_dist", "")
+        importlib.reload(main_module)

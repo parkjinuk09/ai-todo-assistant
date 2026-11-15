@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     llm_model: str = Field("qwen2.5:7b", validation_alias=AliasChoices("LLM_MODEL"))
     llm_timeout: float = Field(120, validation_alias=AliasChoices("LLM_TIMEOUT"))
     cors_origins: str = "*"
+    # 맥에서 로컬로 돌릴 때 빌드된 프론트(dist)를 같은 서버에서 내려준다. 비우면 API만.
+    web_dist: str = ""
     timezone: str = "Asia/Seoul"
 
     @property

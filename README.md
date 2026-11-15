@@ -13,6 +13,7 @@
 | **캘린더** | 월 보기, 날짜를 눌러 그날 할 일 보기·추가, 다른 날로 끌어다 놓으면 시간은 두고 날짜만 이동 |
 | **추천** | 남은 할 일을 보고 뭐부터 할지 한 번에 추천 |
 | **월간 기록** | 완료율, 마감 준수, 요일·분류 통계 + 회고. 지난 달은 확정 저장 |
+| **맥 빠른 추가** | 어느 앱에서든 `⌘⇧D` → 반투명 입력창에 한 줄 → 비서가 처리하고 맥 알림으로 결과. 메뉴 막대에서 오늘·밀린 일 확인/완료 |
 | **PWA** | Chrome에서 Dock에 앱으로 설치 |
 
 ## 기술 스택
@@ -86,9 +87,21 @@ npm run dev                                # http://localhost:5173
 | 03 | [Redis + k6](docs/dev-log/03-redis-k6.md) | 1차 실패 원인 분석, 바이트 캐싱, UPSERT, stampede 락 |
 | 04 | [LLM 제공자 전환](docs/dev-log/04-ai-gateway.md) | Gemini SDK → AI Gateway, 수동 tool loop, OIDC 인증 |
 | 05 | [로컬 LLM + 화면 재설계](docs/dev-log/05-ollama-redesign.md) | 작은 모델: 날짜는 코드가 계산, 조회는 DB로, 거짓 성공 방지 / 대체 문장 캐시 버그 / UI 정리 |
+| 07 | [맥 메뉴 막대 앱](docs/dev-log/07-mac-quickadd.md) | 전역 단축키, 로그인 시 자동 실행, 문서 폴더 접근 제한(TCC) 우회 |
 | 06 | [맥 스타일 화면 + 캘린더](docs/dev-log/06-mac-ui-calendar.md) | 반투명 재질 토큰, 다크 모드, 캘린더 끌어 옮기기, 좁은 화면 점 표시 |
 
 포트폴리오 요약: [docs/PORTFOLIO.md](docs/PORTFOLIO.md)
 
 ## 개발 방식
 모든 작업은 **이슈 → 브랜치 → PR → CI 통과 → squash merge** 로 진행했습니다. ([Issues](https://github.com/parkjinuk09/ai-todo-assistant/issues?q=is%3Aissue) · [PRs](https://github.com/parkjinuk09/ai-todo-assistant/pulls?q=is%3Apr))
+
+## 맥에서 로컬로 쓰기 (메뉴 막대 앱)
+```bash
+./mac/install.sh     # 웹 화면 빌드 + 메뉴 막대 앱 빌드 + 로그인 시 자동 실행 등록
+./mac/uninstall.sh   # 해제 (할 일 데이터는 그대로)
+```
+- `⌘⇧D`: 입력창 열기/닫기. Enter로 보내고 Esc로 닫기
+- 웹 화면은 http://localhost:8000 (백엔드가 같이 내려 줌)
+- 코드를 고친 뒤에는 `install.sh`를 다시 실행하면 반영
+- 필요한 것: Docker Desktop, Ollama(`qwen2.5:7b`), Xcode 명령줄 도구
+
