@@ -1,7 +1,8 @@
 import os
 
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
-os.environ["GEMINI_API_KEY"] = ""
+os.environ["AI_GATEWAY_API_KEY"] = ""
+os.environ.pop("VERCEL_OIDC_TOKEN", None)
 os.environ["REDIS_URL"] = ""
 
 import pytest  # noqa: E402

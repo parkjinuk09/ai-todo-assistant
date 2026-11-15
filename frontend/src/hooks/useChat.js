@@ -15,7 +15,7 @@ export function useChat({ onTodosChanged }) {
     setSending(true);
     try {
       const res = await api.sendChat(text);
-      setMessages((m) => [...m, { id: `ai-${Date.now()}`, role: "model", content: res.reply, actions: res.actions }]);
+      setMessages((m) => [...m, { id: `ai-${Date.now()}`, role: "assistant", content: res.reply, actions: res.actions }]);
       onTodosChanged(res.todos);
     } catch (e) {
       setMessages((m) => [...m, { id: `err-${Date.now()}`, role: "error", content: e.message }]);

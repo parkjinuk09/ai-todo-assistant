@@ -11,8 +11,10 @@ class Settings(BaseSettings):
     database_url: str = Field("sqlite:///./local.db", validation_alias=AliasChoices("DATABASE_URL", "POSTGRES_URL"))
     redis_url: str = Field("", validation_alias=AliasChoices("REDIS_URL", "KV_URL"))
     cache_enabled: bool = True
-    gemini_api_key: str = ""
-    gemini_model: str = "gemini-2.5-flash"
+    # Vercel AI Gateway (OpenAI 호환). 로컬은 API 키, Vercel 배포에서는 OIDC 토큰으로 자동 인증
+    ai_gateway_api_key: str = ""
+    ai_gateway_base_url: str = "https://ai-gateway.vercel.sh/v1"
+    ai_model: str = "google/gemini-2.5-flash-lite"
     cors_origins: str = "*"
     timezone: str = "Asia/Seoul"
 

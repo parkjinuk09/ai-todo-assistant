@@ -1,6 +1,6 @@
 # AI Todo Assistant — 백엔드 포트폴리오 요약
 
-**FastAPI · PostgreSQL · Redis · Gemini function calling · k6**
+**FastAPI · PostgreSQL · Redis · LLM tool calling (Vercel AI Gateway) · k6**
 GitHub: https://github.com/parkjinuk09/ai-todo-assistant
 
 ## 한 줄 요약
@@ -35,7 +35,7 @@ GitHub: https://github.com/parkjinuk09/ai-todo-assistant
 - 멀티스레드 테스트로 loader 1회 실행 검증.
 
 ## 설계 포인트
-- **LLM 권한 최소화**: Gemini에 SQL/세션을 주지 않고 `add/list/update/complete/delete` 5개 함수만 노출. 도구 입력도 REST와 같은 Pydantic 스키마로 검증 (예: priority 범위 보정).
+- **LLM 권한 최소화**: LLM에 SQL/세션을 주지 않고 `add/list/update/complete/delete` 5개 함수만 노출. 도구 입력도 REST와 같은 Pydantic 스키마로 검증 (예: priority 범위 보정).
 - **단일 서비스 레이어**: AI 경로와 REST 경로가 같은 `todo_service`를 호출 → 검증과 캐시 무효화가 한 곳에서 처리.
 - **O(1) 캐시 무효화**: 버전 키 `INCR` 한 번으로 목록·리포트·브리핑 캐시 일괄 무효화. KEYS/SCAN 불필요.
 - **외부 의존성 격리**: Gemini 실패 → 503/502 + 롤백, 브리핑·리포트는 규칙 기반 문장으로 fallback. Redis 장애 → DB fallback.
