@@ -1,10 +1,12 @@
-// 할 일 빠른 추가 — 메뉴 막대 앱
+// 할 일 — 맥 앱 (메뉴 막대 + 빠른 추가 + 할 일 창)
 // ⌘⇧D: 화면 위쪽에 반투명 입력창 → Enter: 창은 바로 닫히고, 비서(/chat)가 처리하면 맥 알림으로 결과
-// 메뉴 막대 아이콘: 밀린 일·오늘 할 일 (누르면 완료), 웹 화면 열기, 종료
+// 메뉴 막대 아이콘: 밀린 일·오늘 할 일 (누르면 완료), 할 일 창 열기, 종료
+// 할 일 창: 웹 화면(할 일·캘린더·월간 기록·비서)을 브라우저 없이 독립 창으로. 열려 있는 동안만 Dock에 보인다
 
 import Carbon.HIToolbox
 import Cocoa
 import UserNotifications
+import WebKit
 
 let api = URL(string: ProcessInfo.processInfo.environment["TODO_API"] ?? "http://127.0.0.1:8000")!
 let webURL = URL(string: ProcessInfo.processInfo.environment["TODO_WEB"] ?? "http://localhost:8000/")!
@@ -142,7 +144,8 @@ final class QuickInput: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     func hide() {
         guard panel.isVisible else { return }
         panel.orderOut(nil)
-        NSApp.hide(nil) // 원래 쓰던 앱으로 포커스 돌려주기
+        // 원래 쓰던 앱으로 포커스 돌려주기 (할 일 창이 떠 있으면 그 창까지 숨기면 안 된다)
+        if !AppDelegate.shared.main.isVisible { NSApp.hide(nil) }
     }
 
     // Enter = 보내기, Esc = 닫기
@@ -165,11 +168,79 @@ final class QuickInput: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     func windowDidResignKey(_ notification: Notification) { hide() }
 }
 
+// MARK: - 할 일 창
+
+final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate {
+    private var window: NSWindow?
+    private var web: WKWebView?
+
+    var isVisible: Bool { window?.isVisible ?? false }
+
+    func show() {
+        if window == nil { build() }
+        NSApp.setActivationPolicy(.regular) // 창이 떠 있는 동안은 Dock·⌘Tab에 보이게
+        NSApp.activate(ignoringOtherApps: true)
+        window?.makeKeyAndOrderFront(nil)
+        todosChanged()
+    }
+
+    private func build() {
+        let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1320, height: 840),
+                         styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                         backing: .buffered, defer: false)
+        w.title = "할 일"
+        w.titleVisibility = .hidden
+        w.titlebarAppearsTransparent = true
+        w.isReleasedWhenClosed = false
+        w.minSize = NSSize(width: 420, height: 520)
+        w.center()
+        w.setFrameAutosaveName("main")
+        w.delegate = self
+
+        let config = WKWebViewConfiguration()
+        // 웹 화면이 '앱 안'임을 알고 신호등 버튼 자리를 비우게 한다
+        config.userContentController.addUserScript(WKUserScript(
+            source: "document.documentElement.classList.add('mac-app')", injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        let v = WKWebView(frame: w.contentLayoutRect, configuration: config)
+        v.navigationDelegate = self
+        v.allowsBackForwardNavigationGestures = false
+        w.contentView = v
+        v.load(URLRequest(url: webURL))
+        window = w
+        web = v
+    }
+
+    /// 빠른 추가·메뉴에서 바꾼 내용을 열려 있는 창에 반영
+    func todosChanged() {
+        web?.evaluateJavaScript("window.dispatchEvent(new Event('todos-changed'))", completionHandler: nil)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if ProcessInfo.processInfo.environment["QUICKTODO_DOCK"] == nil { NSApp.setActivationPolicy(.accessory) }
+    }
+
+    // 로그인 직후처럼 서버가 아직 안 떴으면 잠시 뒤 다시 시도
+    func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { webView.load(URLRequest(url: webURL)) }
+    }
+
+    // 바깥 링크는 기본 브라우저로
+    func webView(_ webView: WKWebView, decidePolicyFor action: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        if let url = action.request.url, url.host != webURL.host, url.scheme?.hasPrefix("http") == true {
+            NSWorkspace.shared.open(url)
+            return decisionHandler(.cancel)
+        }
+        decisionHandler(.allow)
+    }
+}
+
 // MARK: - 앱
 
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUserNotificationCenterDelegate {
     static var shared: AppDelegate!
     let input = QuickInput()
+    let main = MainWindow()
     var status: NSStatusItem!
     var todos: [Todo] = []
     var serverDown = false
@@ -179,6 +250,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         AppDelegate.shared = self
+        buildMainMenu()
         Notify.setup(delegate: self)
 
         status = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -258,6 +330,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
                 self.serverDown = true
             }
             if let menu = self.status.menu { self.build(menu) }
+            self.main.todosChanged()
         }
     }
 
@@ -319,7 +392,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
         add.keyEquivalentModifierMask = [.command, .shift]
         add.target = self
         menu.addItem(add)
-        let web = NSMenuItem(title: "웹 화면 열기", action: #selector(openWeb), keyEquivalent: "")
+        let web = NSMenuItem(title: "할 일 열기", action: #selector(openMain), keyEquivalent: "")
         web.target = self
         menu.addItem(web)
         menu.addItem(.separator())
@@ -335,7 +408,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
         }
     }
 
-    @objc func openWeb() { NSWorkspace.shared.open(webURL) }
+    @objc func openMain() { main.show() }
+
+    // Dock·Launchpad·Spotlight에서 앱을 열면 할 일 창을 띄운다
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        main.show()
+        return false
+    }
+
+    // ⌘C/⌘V 같은 편집 단축키는 메인 메뉴가 있어야 동작한다
+    func buildMainMenu() {
+        let bar = NSMenu()
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "빠른 추가…", action: #selector(toggleInput), keyEquivalent: "")
+        appMenu.addItem(.separator())
+        // ⌘Q는 창만 닫는다. 단축키와 메뉴 막대는 계속 살아 있어야 해서, 완전 종료는 메뉴 막대 아이콘에서
+        appMenu.addItem(withTitle: "창 닫기", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "q")
+        appItem.submenu = appMenu
+        bar.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let edit = NSMenu(title: "편집")
+        edit.addItem(withTitle: "실행 취소", action: Selector(("undo:")), keyEquivalent: "z")
+        edit.addItem(withTitle: "실행 복귀", action: Selector(("redo:")), keyEquivalent: "Z")
+        edit.addItem(.separator())
+        edit.addItem(withTitle: "오려두기", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        edit.addItem(withTitle: "복사하기", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        edit.addItem(withTitle: "붙여넣기", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        edit.addItem(withTitle: "전체 선택", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = edit
+        bar.addItem(editItem)
+
+        let winItem = NSMenuItem()
+        let win = NSMenu(title: "윈도우")
+        win.addItem(withTitle: "닫기", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w")
+        win.addItem(withTitle: "최소화", action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m")
+        winItem.submenu = win
+        bar.addItem(winItem)
+        NSApp.mainMenu = bar
+    }
 
     // 앱이 앞에 있어도 알림 배너를 보여준다
     func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,

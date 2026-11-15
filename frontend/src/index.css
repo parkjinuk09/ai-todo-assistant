@@ -82,6 +82,8 @@
 }
 
 @layer components {
+  /* 맥 앱 창 안: 제목 막대가 투명해서 신호등 버튼 자리를 비워 둔다 */
+  .mac-app .app-sidebar { padding-top: 22px; }
   /* 시스템 설정 앱의 둥근 묶음 */
   .group-box {
     background: var(--color-group);

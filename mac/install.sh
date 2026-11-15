@@ -29,6 +29,12 @@ echo "3/4 메뉴 막대 앱 빌드"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$REPO/mac/QuickTodo/Info.plist" "$APP/Contents/Info.plist"
+# 앱 아이콘: 웹 아이콘(512px)에서 크기별로 만들어 icns로 묶는다
+ICONSET="$(mktemp -d)/AppIcon.iconset"; mkdir -p "$ICONSET" "$APP/Contents/Resources"
+for size in 16 32 128 256 512; do
+  sips -z $size $size "$REPO/frontend/public/icon-512.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+done
+iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 swiftc -O "$REPO/mac/QuickTodo/main.swift" -o "$APP/Contents/MacOS/QuickTodo"
 codesign --force --sign - "$APP" >/dev/null 2>&1
 
@@ -59,5 +65,5 @@ agent local.ai-todo.backend "<true/>" /bin/zsh "$RUN/run-backend.sh"
 # 메뉴에서 '종료'하면(정상 종료) 다시 켜지 않는다
 agent local.ai-todo.quickadd "<dict><key>SuccessfulExit</key><false/></dict>" "$APP/Contents/MacOS/QuickTodo"
 
-echo "완료: ⌘⇧D 로 입력창, 메뉴 막대 체크 아이콘, 웹 화면 http://localhost:8000"
+echo "완료: ⌘⇧D 로 입력창, 메뉴 막대 체크 아이콘, Launchpad·Spotlight에서 '할 일' 앱"
 echo "로그: $LOGS"
