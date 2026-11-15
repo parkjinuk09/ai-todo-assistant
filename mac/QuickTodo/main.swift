@@ -196,12 +196,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
     // ⌘⇧D (Carbon 핫키: 손쉬운 사용 권한 필요 없음)
     func registerHotKey() {
         var spec = EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
-        InstallEventHandler(GetApplicationEventTarget(), { _, _, _ in
+        InstallEventHandler(GetEventDispatcherTarget(), { _, _, _ in
+            NSLog("단축키 눌림")
             DispatchQueue.main.async { AppDelegate.shared.toggleInput() }
             return noErr
         }, 1, &spec, nil, nil)
         let id = EventHotKeyID(signature: OSType(0x5154_4F44), id: 1) // 'QTOD'
-        let err = RegisterEventHotKey(UInt32(kVK_ANSI_D), UInt32(cmdKey | shiftKey), id, GetApplicationEventTarget(), 0, &hotKey)
+        let err = RegisterEventHotKey(UInt32(kVK_ANSI_D), UInt32(cmdKey | shiftKey), id, GetEventDispatcherTarget(), 0, &hotKey)
         NSLog(err == noErr ? "단축키 ⌘⇧D 등록됨" : "단축키 등록 실패 (\(err)): 다른 앱이 ⌘⇧D를 쓰고 있을 수 있음")
         if err != noErr { Notify.send("단축키를 쓸 수 없어", "다른 앱이 ⌘⇧D를 쓰고 있어. 메뉴 막대 아이콘의 '빠른 추가…'는 그대로 돼.") }
 
@@ -346,5 +347,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, UNUser
 let app = NSApplication.shared
 let delegate = AppDelegate()
 app.delegate = delegate
-app.setActivationPolicy(.accessory) // Dock 아이콘 없이 메뉴 막대에만
+// 평소에는 Dock 아이콘 없이 메뉴 막대에만. QUICKTODO_DOCK=1 이면 Dock에 보이게 (화면 자동화 테스트용)
+app.setActivationPolicy(ProcessInfo.processInfo.environment["QUICKTODO_DOCK"] == nil ? .accessory : .regular)
 app.run()
