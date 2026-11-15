@@ -84,7 +84,7 @@ export default function App() {
           {view === "todos" && (
             <>
               <h1 className="mx-auto mb-4 max-w-2xl px-1 text-[26px] font-bold leading-none tracking-tight">할 일</h1>
-              <TodoList todos={todo.todos} loading={todo.loading} onAdd={todo.add} onToggle={todo.toggle} onDelete={todo.remove} />
+              <TodoList todos={todo.todos} loading={todo.loading} onAdd={todo.add} onToggle={todo.toggle} onDelete={todo.remove} onUpdate={todo.update} />
             </>
           )}
           {view === "calendar" && (

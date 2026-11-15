@@ -151,7 +151,7 @@ export default function CalendarView({ todos, onAdd, onToggle, onDelete, onUpdat
         </div>
         {selItems.length > 0 ? (
           <Group>
-            {selItems.map((t) => <TodoRow key={t.id} todo={t} onToggle={onToggle} onDelete={onDelete} onlyTime />)}
+            {selItems.map((t) => <TodoRow key={t.id} todo={t} onToggle={onToggle} onDelete={onDelete} onUpdate={onUpdate} onlyTime />)}
           </Group>
         ) : (
           <p className="mt-4 px-1 text-mute">이 날은 비어 있어.</p>
