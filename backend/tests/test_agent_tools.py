@@ -59,3 +59,109 @@ def test_chat_tool_loop(client, monkeypatch):
     assert body["todos"][0]["title"] == "OS 과제"
     roles = [m["role"] for m in client.get("/chat").json()]
     assert roles == ["user", "assistant"]
+
+
+def test_calendar_labels_weeks_from_monday():
+    from datetime import datetime
+
+    from app.core.config import settings
+    from app.services.ai_agent import _calendar
+
+    cal = _calendar(datetime(2026, 11, 15, 18, tzinfo=settings.tz)).splitlines()  # 일요일
+    assert cal[0] == "2026-11-15 이번주 일요일 = 오늘"
+    assert "2026-11-17 다음주 화요일 = 모레 = 다가오는 화요일" in cal
+    assert cal[8] == "2026-11-23 다다음주 월요일"
+
+
+def test_clean_reply_strips_echoed_prompt():
+    from app.services.ai_agent import _clean_reply
+
+    assert _clean_reply("추가했어.\n\n현재 시각: 2026-11-15\n[달력]\n...") == "추가했어."
+    assert _clean_reply("완료했어.\n\n지금 할 일 목록:\n- id=3 치과") == "완료했어."
+    assert _clean_reply("추가했어. 내일 오전 10시截止输入") == "추가했어. 내일 오전 10시"
+    assert _clean_reply("그대로") == "그대로"
+
+
+class LyingClient:
+    """도구를 부르지 않고 '추가했어'라고만 답하는 모델. replies를 차례로 돌려준다."""
+
+    def __init__(self, replies):
+        self.replies, self.seen = list(replies), []
+        self.chat = SimpleNamespace(completions=SimpleNamespace(create=self.create))
+
+    def create(self, **kwargs):
+        self.seen.append(kwargs["messages"])
+        msg = SimpleNamespace(content=self.replies.pop(0), tool_calls=None)
+        return SimpleNamespace(choices=[SimpleNamespace(message=msg)])
+
+
+def test_claimed_change_without_tool_call_is_retried_then_reported(client, monkeypatch):
+    fake = LyingClient(["치과 추가했어!", "치과 추가 완료!"])
+    monkeypatch.setattr(ai_agent, "_client", lambda: fake)
+    body = client.post("/chat", json={"message": "치과 추가"}).json()
+    assert len(fake.seen) == 2 and fake.seen[1][-1]["content"] == ai_agent.NUDGE  # 한 번 다시 시킴
+    assert body["actions"] == [] and "바꾼 건 없어" in body["reply"]          # 거짓 성공을 그대로 전달하지 않음
+
+
+def test_plain_answer_is_not_retried(client, monkeypatch):
+    fake = LyingClient(["천만에!"])
+    monkeypatch.setattr(ai_agent, "_client", lambda: fake)
+    assert client.post("/chat", json={"message": "고마워"}).json()["reply"] == "천만에!"
+    assert len(fake.seen) == 1
+
+
+def test_parse_dt_date_only_is_end_of_day():
+    from app.services.ai_agent import _parse_dt
+
+    dt = _parse_dt("2026-11-20")
+    assert (dt.hour, dt.minute) == (23, 59) and dt.utcoffset().total_seconds() == 9 * 3600
+    assert _parse_dt("2026-11-20 15:00").hour == 15
+
+
+def test_clean_reply_hides_ids_and_markup():
+    from app.services.ai_agent import _clean_reply
+
+    assert _clean_reply("독후감을 추가했어. (id: 18937)") == "독후감을 추가했어."
+    assert _clean_reply("<내일 마감>에는 은행 가기가 있어.") == "내일 마감에는 은행 가기가 있어."
+
+
+def test_priority_ignored_unless_user_mentions_it():
+    db = SessionLocal()
+    tools = build_tools(db, [], allow_priority=False)
+    assert tools["add_todo"](title="은행", priority=3)["title"] == "은행"
+    tools_ok = build_tools(db, [], allow_priority=True)
+    tools_ok["add_todo"](title="발표", priority=1)
+    got = {t["title"]: t["priority"] for t in tools["list_todos"]()}
+    assert got == {"은행": 2, "발표": 1}
+    db.close()
+
+
+def test_query_answered_from_db_without_llm(client, monkeypatch):
+    from datetime import datetime, timedelta
+
+    from app.core.config import settings
+
+    def boom():
+        raise AssertionError("조회에는 LLM을 쓰지 않는다")
+
+    monkeypatch.setattr(ai_agent, "_client", boom)
+    tomorrow = (datetime.now(settings.tz) + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    client.post("/todos", json={"title": "은행 가기", "due_at": tomorrow.isoformat()})
+    body = client.post("/chat", json={"message": "오늘이랑 내일 할 일 뭐 있어?"}).json()
+    assert body["actions"] == []
+    lines = body["reply"].splitlines()
+    assert lines[0].endswith("없어") and "은행 가기 10:00" in lines[1]
+
+
+def test_is_query_routing():
+    from app.services.ai_agent import is_query
+
+    assert is_query("내일 뭐 있어?") and is_query("남은 할 일 목록 보여줘")
+    assert not is_query("내일 치과 추가해줘") and not is_query("오늘 뭐부터 해야 돼?")
+    assert not is_query("빨래 완료")
+
+
+def test_clean_reply_hides_bare_bracket_ids():
+    from app.services.ai_agent import _clean_reply
+
+    assert _clean_reply("은행 가기 [18940], 발표 [18939]") == "은행 가기, 발표"

@@ -11,10 +11,11 @@ class Settings(BaseSettings):
     database_url: str = Field("sqlite:///./local.db", validation_alias=AliasChoices("DATABASE_URL", "POSTGRES_URL"))
     redis_url: str = Field("", validation_alias=AliasChoices("REDIS_URL", "KV_URL"))
     cache_enabled: bool = True
-    # Vercel AI Gateway (OpenAI 호환). 로컬은 API 키, Vercel 배포에서는 OIDC 토큰으로 자동 인증
-    ai_gateway_api_key: str = ""
-    ai_gateway_base_url: str = "https://ai-gateway.vercel.sh/v1"
-    ai_model: str = "google/gemini-2.5-flash-lite"
+    # LLM: OpenAI 호환 엔드포인트. 기본값은 로컬 Ollama (키 불필요)
+    llm_base_url: str = Field("http://localhost:11434/v1", validation_alias=AliasChoices("LLM_BASE_URL"))
+    llm_api_key: str = Field("ollama", validation_alias=AliasChoices("LLM_API_KEY"))
+    llm_model: str = Field("qwen2.5:7b", validation_alias=AliasChoices("LLM_MODEL"))
+    llm_timeout: float = Field(120, validation_alias=AliasChoices("LLM_TIMEOUT"))
     cors_origins: str = "*"
     timezone: str = "Asia/Seoul"
 

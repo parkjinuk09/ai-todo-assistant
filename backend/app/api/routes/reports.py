@@ -15,7 +15,3 @@ def monthly_report(month: str | None = None, regenerate: bool = False,
     body, status_ = report_service.get_monthly_report_cached(db, month, regenerate)
     return Response(body, media_type="application/json", headers={"X-Cache": status_})
 
-
-@router.get("/months", response_model=list[str])
-def saved_months(db: Session = Depends(get_db)):
-    return report_service.list_saved_months(db)

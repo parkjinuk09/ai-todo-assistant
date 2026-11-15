@@ -2,6 +2,7 @@ import fakeredis
 import pytest
 
 from app.core import cache
+from app.services import ai_agent
 
 
 @pytest.fixture
@@ -29,7 +30,8 @@ def test_todos_list_hit_and_invalidate(client, redis_cache):
     assert len(client.get("/todos").json()) == 1
 
 
-def test_report_and_briefing_cached(client, redis_cache):
+def test_report_and_briefing_cached(client, redis_cache, monkeypatch):
+    monkeypatch.setattr(ai_agent, "generate_text", lambda prompt: "LLM 문장")
     client.post("/todos", json={"title": "a"})
     assert client.get("/reports/monthly").headers["X-Cache"] == "MISS"
     assert client.get("/reports/monthly").headers["X-Cache"] == "HIT"
@@ -43,6 +45,16 @@ def test_report_and_briefing_cached(client, redis_cache):
     assert client.get("/reports/monthly?month=2025-01").headers["X-Cache"] == "MISS"
     assert client.get("/reports/monthly?month=2025-01").headers["X-Cache"] == "HIT"
     assert client.get("/reports/monthly?month=2025-01&regenerate=true").headers["X-Cache"] == "BYPASS"
+
+
+
+def test_llm_fallback_text_is_not_cached(client, redis_cache):
+    """LLM이 꺼져 있을 때 만든 대체 문장이 캐시에 남으면, 모델을 켜도 계속 옛 문장이 보인다."""
+    client.post("/todos", json={"title": "a"})
+    assert client.get("/briefing").headers["X-Cache"] == "MISS"
+    assert client.get("/briefing").headers["X-Cache"] == "MISS"
+    assert client.get("/reports/monthly").headers["X-Cache"] == "MISS"
+    assert client.get("/reports/monthly").headers["X-Cache"] == "MISS"
 
 
 def test_redis_down_falls_back_to_db(client, monkeypatch):

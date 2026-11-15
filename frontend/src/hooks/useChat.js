@@ -10,8 +10,7 @@ export function useChat({ onTodosChanged }) {
   }, []);
 
   const send = async (text) => {
-    const optimistic = { id: `tmp-${Date.now()}`, role: "user", content: text };
-    setMessages((m) => [...m, optimistic]);
+    setMessages((m) => [...m, { id: `tmp-${Date.now()}`, role: "user", content: text }]);
     setSending(true);
     try {
       const res = await api.sendChat(text);
