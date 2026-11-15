@@ -19,16 +19,29 @@ export function useTodos() {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const add = async (body) => { await api.createTodo(body); refresh(); };
-  const toggle = async (todo) => {
-    setTodos((ts) => ts.map((t) => (t.id === todo.id ? { ...t, done: !t.done } : t)));
-    await api.updateTodo(todo.id, { done: !todo.done });
-    refresh();
-  };
-  const remove = async (id) => {
-    setTodos((ts) => ts.filter((t) => t.id !== id));
-    await api.deleteTodo(id);
+  // 낙관적 업데이트가 실패하면 서버 상태로 되돌리고 에러를 보여준다
+  const run = async (fn) => {
+    try {
+      await fn();
+      setError(null);
+      return true;
+    } catch (e) {
+      setError(e.message);
+      return false;
+    } finally {
+      refresh();
+    }
   };
 
-  return { todos, setTodos, loading, error, refresh, add, toggle, remove };
+  const add = (body) => run(() => api.createTodo(body));
+  const toggle = (todo) => {
+    setTodos((ts) => ts.map((t) => (t.id === todo.id ? { ...t, done: !t.done } : t)));
+    return run(() => api.updateTodo(todo.id, { done: !todo.done }));
+  };
+  const remove = (id) => {
+    setTodos((ts) => ts.filter((t) => t.id !== id));
+    return run(() => api.deleteTodo(id));
+  };
+
+  return { todos, setTodos, loading, error, clearError: () => setError(null), add, toggle, remove };
 }

@@ -19,7 +19,8 @@ def test_validation(client):
     assert client.post("/todos", json={"title": "x", "priority": 9}).status_code == 422
 
 
-def test_chat_without_key_returns_503(client):
+def test_chat_when_llm_down_returns_503(client):
+    assert client.get("/health").json()["llm"] is False
     assert client.post("/chat", json={"message": "안녕"}).status_code == 503
 
 

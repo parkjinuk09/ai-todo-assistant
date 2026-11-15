@@ -1,8 +1,8 @@
 import os
 
 os.environ["DATABASE_URL"] = "sqlite:///./test.db"
-os.environ["AI_GATEWAY_API_KEY"] = ""
-os.environ.pop("VERCEL_OIDC_TOKEN", None)
+# 닫힌 포트 → LLM 연결 실패를 빠르게 재현
+os.environ["LLM_BASE_URL"] = "http://127.0.0.1:9/v1"
 os.environ["REDIS_URL"] = ""
 
 import pytest  # noqa: E402

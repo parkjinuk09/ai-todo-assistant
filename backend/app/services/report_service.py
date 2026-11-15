@@ -88,9 +88,10 @@ def compute_stats(db: Session, month: str) -> ReportStats:
     )
 
 
-def ai_comment(month: str, stats: ReportStats) -> str:
+def ai_comment(month: str, stats: ReportStats) -> tuple[str, bool]:
+    """(문장, 확정해도 되는지). LLM이 꺼져 있을 때의 대체 문장은 저장·캐시하지 않는다."""
     if stats.created == 0 and stats.completed == 0:
-        return "이번 달은 기록이 없어. 다음 달엔 작은 것부터 하나씩 적어보자!"
+        return "이번 달은 기록이 없어.", True
     cats = ", ".join(f"{c.category} {c.completed}/{c.created}" for c in stats.by_category) or "없음"
     prompt = (
         f"{month} 한 달 투두 기록이야.\n"
@@ -101,10 +102,10 @@ def ai_comment(month: str, stats: ReportStats) -> str:
         "친구처럼 반말로 한 달 회고를 써줘. 잘한 점 1개, 아쉬운 점 1개, 다음 달 제안 1개. 4줄 이내."
     )
     try:
-        return ai_agent.generate_text(prompt)
+        return ai_agent.generate_text(prompt), True
     except Exception:
         return (f"{stats.completed}개를 끝냈고 완료율은 {stats.completion_rate}%야. "
-                f"{stats.best_weekday or '-'}요일에 제일 열심히 했어!")
+                f"{stats.best_weekday or '-'}요일에 제일 많이 했어."), False
 
 
 CURRENT_TTL = 300        # 이번 달: 5분 (쓰기 시 버전 무효화)
@@ -121,11 +122,20 @@ def get_monthly_report_cached(db: Session, month: str | None = None,
         return get_monthly_report(db, month, regenerate=True).model_dump_json().encode(), "BYPASS"
 
     key = final_key if month < current_month() else cache.versioned(f"report:{month}")
-    return cache.get_or_set_raw(key, FINAL_TTL if month < current_month() else CURRENT_TTL,
-                                lambda: get_monthly_report(db, month).model_dump_json().encode())
+    fallback = []
+
+    def load() -> bytes:
+        report = get_monthly_report(db, month, _fallback=fallback)
+        return report.model_dump_json().encode()
+
+    body, status_ = cache.get_or_set_raw(key, FINAL_TTL if month < current_month() else CURRENT_TTL, load)
+    if fallback:  # LLM 없이 만든 임시 문장은 캐시에 남기지 않는다 → 모델이 켜지면 바로 반영
+        cache.delete(key)
+    return body, status_
 
 
-def get_monthly_report(db: Session, month: str | None = None, regenerate: bool = False) -> ReportOut:
+def get_monthly_report(db: Session, month: str | None = None, regenerate: bool = False,
+                       _fallback: list | None = None) -> ReportOut:
     month = month or current_month()
     month_range(month)  # 형식 검증
     if month > current_month():
@@ -138,9 +148,11 @@ def get_monthly_report(db: Session, month: str | None = None, regenerate: bool =
                          generated_at=saved.generated_at, finalized=True)
 
     stats = compute_stats(db, month)
-    comment = ai_comment(month, stats)
+    comment, final_ok = ai_comment(month, stats)
+    if not final_ok and _fallback is not None:
+        _fallback.append(True)
 
-    if finalized:  # 지난 달만 확정본으로 저장
+    if finalized and final_ok:  # 지난 달만, LLM 회고가 있을 때만 확정본으로 저장
         _upsert_report(db, month, stats.model_dump(), comment)
 
     return ReportOut(month=month, stats=stats, ai_comment=comment, generated_at=utcnow(), finalized=finalized)
@@ -161,6 +173,3 @@ def _upsert_report(db: Session, month: str, stats: dict, comment: str) -> None:
     db.execute(stmt)
     db.commit()
 
-
-def list_saved_months(db: Session) -> list[str]:
-    return list(db.scalars(select(MonthlyReport.month).order_by(MonthlyReport.month.desc())))

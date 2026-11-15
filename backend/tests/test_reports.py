@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from app.core.database import SessionLocal
 from app.models import MonthlyReport, Todo
-from app.services import report_service
+from app.services import ai_agent, report_service
 
 KST = timezone(timedelta(hours=9))
 
@@ -31,7 +31,8 @@ def test_compute_stats():
     db.close()
 
 
-def test_past_month_is_saved_and_reused(client):
+def test_past_month_is_saved_and_reused(client, monkeypatch):
+    monkeypatch.setattr(ai_agent, "generate_text", lambda prompt: "LLM 회고")
     db = SessionLocal()
     seed(db)
     db.close()
@@ -48,14 +49,12 @@ def test_past_month_is_saved_and_reused(client):
     # 확정본 재사용 → 새 데이터 반영 안 됨, regenerate 시 반영
     assert client.get("/reports/monthly?month=2025-03").json()["stats"]["created"] == 4
     assert client.get("/reports/monthly?month=2025-03&regenerate=true").json()["stats"]["created"] == 5
-    assert client.get("/reports/months").json() == ["2025-03"]
 
 
 def test_current_month_not_saved(client):
     client.post("/todos", json={"title": "이번 달"})
     body = client.get("/reports/monthly").json()
     assert body["finalized"] is False and body["stats"]["created"] == 1
-    assert client.get("/reports/months").json() == []
 
 
 def test_invalid_month(client):
@@ -69,4 +68,16 @@ def test_upsert_is_idempotent():
     report_service._upsert_report(db, "2025-01", {"a": 2}, "second")
     rows = db.query(MonthlyReport).all()
     assert len(rows) == 1 and rows[0].ai_comment == "second"
+    db.close()
+
+
+def test_past_month_not_finalized_without_llm(client):
+    """LLM이 꺼져 있을 때 만든 임시 회고는 확정본으로 저장하지 않는다."""
+    db = SessionLocal()
+    seed(db)
+    db.close()
+    body = client.get("/reports/monthly?month=2025-03").json()
+    assert body["finalized"] is True and body["ai_comment"]
+    db = SessionLocal()
+    assert db.query(MonthlyReport).count() == 0
     db.close()

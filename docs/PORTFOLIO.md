@@ -1,6 +1,6 @@
 # AI Todo Assistant — 백엔드 포트폴리오 요약
 
-**FastAPI · PostgreSQL · Redis · LLM tool calling (Vercel AI Gateway) · k6**
+**FastAPI · PostgreSQL · Redis · LLM tool calling (Ollama 로컬 모델) · k6**
 GitHub: https://github.com/parkjinuk09/ai-todo-assistant
 
 ## 한 줄 요약
@@ -38,11 +38,12 @@ GitHub: https://github.com/parkjinuk09/ai-todo-assistant
 - **LLM 권한 최소화**: LLM에 SQL/세션을 주지 않고 `add/list/update/complete/delete` 5개 함수만 노출. 도구 입력도 REST와 같은 Pydantic 스키마로 검증 (예: priority 범위 보정).
 - **단일 서비스 레이어**: AI 경로와 REST 경로가 같은 `todo_service`를 호출 → 검증과 캐시 무효화가 한 곳에서 처리.
 - **O(1) 캐시 무효화**: 버전 키 `INCR` 한 번으로 목록·리포트·브리핑 캐시 일괄 무효화. KEYS/SCAN 불필요.
-- **외부 의존성 격리**: LLM 호출 실패 → 503/502 + 롤백, 브리핑·리포트는 규칙 기반 문장으로 fallback. Redis 장애 → DB fallback.
+- **외부 의존성 격리**: LLM 호출 실패 → 503/502 + 롤백, 브리핑·리포트는 규칙 기반 문장으로 fallback (**대체 문장은 캐시·확정 저장하지 않음** → 모델이 돌아오면 즉시 반영). Redis 장애 → DB fallback.
+- **작은 로컬 모델에 맞춘 프롬프트**: 날짜 계산은 서버가 만든 2주치 달력으로, id 조회는 남은 할 일 스냅샷으로 대신 → 도구 호출 단계 축소.
 - **집계는 SQL, 해석은 LLM**: `COUNT(*) FILTER`, `SUM(CASE)`, `GROUP BY`로 정확히 계산하고 LLM에는 요약 수치만 전달 → 숫자 환각 없음, 토큰 사용량 일정.
 
 ## 품질
-- pytest 15개: CRUD, 검증, AI 도구의 DB 반영, 리포트 지표, 확정 저장/재생성, 캐시 HIT/MISS/무효화, Redis 장애, stampede, UPSERT 멱등성.
+- pytest 21개: CRUD, 검증, AI 도구의 DB 반영, 리포트 지표, 확정 저장/재생성, 캐시 HIT/MISS/무효화, Redis 장애, stampede, UPSERT 멱등성.
 - GitHub Actions: pytest → 프론트 빌드 → **Postgres·Redis 서비스 컨테이너로 k6 smoke 테스트**.
 - 이슈 → PR → CI → squash merge 워크플로.
 

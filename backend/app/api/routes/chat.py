@@ -42,15 +42,19 @@ BRIEFING_TTL = 600
 def briefing(db: Session = Depends(get_db)):
     """LLM 호출이 들어가는 가장 비싼 조회 → 투두가 안 바뀌었으면 10분간 캐시."""
     key = cache.versioned(f"briefing:{datetime.now(settings.tz).date()}")
-    body, status_ = cache.get_or_set_raw(key, BRIEFING_TTL, lambda: _build_briefing(db).model_dump_json().encode())
+    fallback = []
+    body, status_ = cache.get_or_set_raw(
+        key, BRIEFING_TTL, lambda: _build_briefing(db, fallback).model_dump_json().encode())
+    if fallback:  # LLM 없이 만든 대체 문장은 캐시하지 않는다
+        cache.delete(key)
     return Response(body, media_type="application/json", headers={"X-Cache": status_})
 
 
-def _build_briefing(db: Session) -> BriefingOut:
+def _build_briefing(db: Session, fallback: list) -> BriefingOut:
     overdue, today = todo_service.briefing_buckets(db)
     pending = todo_service.list_todos(db, done=False)
     if not pending:
-        return BriefingOut(summary="남은 할 일이 없어! 오늘은 푹 쉬어 🙌", overdue=[], today=[])
+        return BriefingOut(summary="남은 할 일이 없어.", overdue=[], today=[])
 
     lines = "\n".join(
         f"- {t.title} (마감 {t.due_at.isoformat() if t.due_at else '없음'}, 우선순위 {t.priority})"
@@ -61,5 +65,6 @@ def _build_briefing(db: Session) -> BriefingOut:
     try:
         summary = ai_agent.generate_text(prompt)
     except Exception:
+        fallback.append(True)
         summary = f"밀린 일 {len(overdue)}개, 오늘 마감 {len(today)}개가 있어. 마감 빠른 것부터 하자!"
     return BriefingOut(summary=summary, overdue=overdue, today=today)

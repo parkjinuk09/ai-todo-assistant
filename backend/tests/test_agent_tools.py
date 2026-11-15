@@ -59,3 +59,22 @@ def test_chat_tool_loop(client, monkeypatch):
     assert body["todos"][0]["title"] == "OS 과제"
     roles = [m["role"] for m in client.get("/chat").json()]
     assert roles == ["user", "assistant"]
+
+
+def test_calendar_labels_weeks_from_monday():
+    from datetime import datetime
+
+    from app.core.config import settings
+    from app.services.ai_agent import _calendar
+
+    cal = _calendar(datetime(2026, 11, 15, 18, tzinfo=settings.tz)).splitlines()  # 일요일
+    assert cal[0] == "2026-11-15 이번주 일요일 = 오늘"
+    assert "2026-11-17 다음주 화요일 = 모레" in cal
+
+
+def test_clean_reply_strips_echoed_prompt():
+    from app.services.ai_agent import _clean_reply
+
+    assert _clean_reply("추가했어.\n\n현재 시각: 2026-11-15\n[달력]\n...") == "추가했어."
+    assert _clean_reply("완료했어.\n\n지금 할 일 목록:\n- id=3 치과") == "완료했어."
+    assert _clean_reply("그대로") == "그대로"

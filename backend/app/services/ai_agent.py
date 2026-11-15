@@ -1,13 +1,12 @@
-"""LLM tool calling 기반 투두 에이전트 (Vercel AI Gateway, OpenAI 호환 API).
+"""LLM tool calling 기반 투두 에이전트 (OpenAI 호환 API, 기본: 로컬 Ollama).
 
 LLM은 '도구 호출 의도'만 만들고, 실제 DB 변경은 서버의 서비스 레이어가 수행한다.
-제공자 교체는 이 파일(클라이언트 생성부)과 환경변수만 바꾸면 된다.
+제공자 교체는 환경변수(LLM_BASE_URL / LLM_API_KEY / LLM_MODEL)만 바꾸면 된다.
 """
 import json
-import os
-from contextvars import ContextVar
-from datetime import datetime
+from datetime import datetime, timedelta
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,40 +16,91 @@ from app.schemas.todo import TodoCreate, TodoUpdate
 from app.services import todo_service
 
 SYSTEM_PROMPT = """너는 사용자의 개인 투두 비서야.
-- 사용자가 할 일을 말하면 도구로 직접 추가/수정/완료/삭제해.
-- 수정·완료·삭제 전에는 list_todos로 id를 먼저 확인해.
-- 날짜·시간 표현(내일, 다음주 화요일 3시)은 현재 시각 기준으로 ISO 8601(+09:00)로 바꿔.
+- 사용자가 할 일을 말하면 반드시 도구를 호출해서 직접 추가/수정/완료/삭제해. 도구 호출을 글로 흉내 내지 마.
+- 수정·완료·삭제할 때는 아래 '지금 할 일' 목록의 id를 써. 목록에 없을 때만 list_todos로 찾아.
+- 날짜는 아래 달력을 보고 'YYYY-MM-DDTHH:MM' 형식으로 넣어. 시간을 말 안 했으면 날짜만 넣어.
 - category는 공부/일/개인/건강/기타 중 하나, priority는 1(높음)~3(낮음).
-- 답변은 한국어 반말, 짧고 친근하게. 무엇을 바꿨는지 한 줄로 알려줘."""
+- 답변은 한국어 반말로 한두 문장. 무엇을 바꿨는지만 말해."""
 
-HISTORY_LIMIT = 20
+HISTORY_LIMIT = 4  # 작은 로컬 모델은 예전 답(특히 실패 답)을 따라 하므로 짧게
 MAX_TOOL_ROUNDS = 6
-
-# Vercel은 요청 헤더(x-vercel-oidc-token)로도 OIDC 토큰을 넘겨준다 → 미들웨어가 여기에 저장
-request_oidc_token: ContextVar[str | None] = ContextVar("request_oidc_token", default=None)
+WEEKDAYS = "월화수목금토일"
 
 
 class AIUnavailable(Exception):
     pass
 
 
-def _api_key() -> str:
-    key = settings.ai_gateway_api_key or request_oidc_token.get() or os.getenv("VERCEL_OIDC_TOKEN", "")
-    if not key:
-        raise AIUnavailable("AI 설정이 없어요 (AI_GATEWAY_API_KEY 또는 Vercel 배포 환경 필요)")
-    return key
-
-
 def _client():
     from openai import OpenAI
 
-    return OpenAI(api_key=_api_key(), base_url=settings.ai_gateway_base_url, timeout=30, max_retries=1)
+    return OpenAI(api_key=settings.llm_api_key, base_url=settings.llm_base_url,
+                  timeout=settings.llm_timeout, max_retries=0)
+
+
+def _complete(client, **kwargs):
+    """연결 실패(Ollama 꺼짐 등)는 AIUnavailable로 바꿔 503으로 응답하게 한다."""
+    from openai import APIConnectionError, NotFoundError
+
+    try:
+        return client.chat.completions.create(model=settings.llm_model, **kwargs)
+    except APIConnectionError as e:
+        raise AIUnavailable("LLM 서버에 연결할 수 없어요. 터미널에서 `ollama serve`를 실행해 주세요.") from e
+    except NotFoundError as e:
+        raise AIUnavailable(f"모델 {settings.llm_model}이 없어요. `ollama pull {settings.llm_model}`") from e
+
+
+def llm_status() -> str | None:
+    """None이면 사용 가능. 아니면 사람이 읽을 수 있는 이유 (서버 꺼짐 / 모델 미설치)."""
+    try:
+        res = httpx.get(f"{settings.llm_base_url.rstrip('/')}/models", timeout=1.0,
+                        headers={"Authorization": f"Bearer {settings.llm_api_key}"})
+        res.raise_for_status()
+    except httpx.HTTPError:
+        return "로컬 모델 서버에 연결할 수 없어. 터미널에서 `ollama serve`를 실행해 줘."
+    ids = {m.get("id") for m in res.json().get("data", [])}
+    if settings.llm_model not in ids and f"{settings.llm_model}:latest" not in ids:
+        return f"모델 {settings.llm_model}이 설치돼 있지 않아. `ollama pull {settings.llm_model}`"
+    return None
+
+
+def _calendar(now: datetime) -> str:
+    """작은 로컬 모델은 '다음주 화요일' 같은 날짜 계산을 자주 틀린다 → 2주치 달력을 직접 준다."""
+    week0 = now.date() - timedelta(days=now.weekday())  # 이번 주 월요일
+    lines = []
+    for i in range(15):
+        d = now.date() + timedelta(days=i)
+        week = ["이번주", "다음주", "다다음주"][(d - week0).days // 7]
+        extra = {0: " = 오늘", 1: " = 내일", 2: " = 모레"}.get(i, "")
+        lines.append(f"{d.isoformat()} {week} {WEEKDAYS[d.weekday()]}요일{extra}")
+    return "\n".join(lines)
+
+
+def _pending_snapshot(db: Session) -> str:
+    """남은 할 일을 프롬프트에 직접 넣어 '목록 조회 → 수정' 두 단계를 한 단계로 줄인다."""
+    todos = todo_service.list_todos(db, done=False)[:30]
+    if not todos:
+        return "(없음)"
+    return "\n".join(
+        f"- id={t.id} {t.title}" + (f" (마감 {t.due_at.astimezone(settings.tz):%m-%d %H:%M})" if t.due_at else "")
+        for t in todos)
+
+
+CONTEXT_MARKERS = ("현재 시각:", "[달력]", "[지금 할 일]", "지금 할 일 목록:")
+
+
+def _clean_reply(text: str) -> str:
+    """작은 모델이 시스템 프롬프트의 달력·목록을 답변에 그대로 붙이는 경우 잘라낸다."""
+    cut = min((i for i in (text.find(m) for m in CONTEXT_MARKERS) if i >= 0), default=len(text))
+    lines = [ln for ln in text[:cut].splitlines() if "id=" not in ln]  # 내부 id 노출 방지
+    return "\n".join(lines).strip()
 
 
 def _parse_dt(value: str | None) -> datetime | None:
+    """'2026-11-16', '2026-11-16 15:00', '...T15:00:00+09:00', '...Z' 모두 허용."""
     if not value:
         return None
-    dt = datetime.fromisoformat(value)
+    dt = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
     return dt if dt.tzinfo else dt.replace(tzinfo=settings.tz)
 
 
@@ -137,8 +187,10 @@ def _run_tool(tools: dict, name: str, raw_args: str) -> str:
 def chat(db: Session, message: str) -> tuple[str, list[str]]:
     client = _client()
     history = list(db.scalars(select(ChatMessage).order_by(ChatMessage.id.desc()).limit(HISTORY_LIMIT)))
-    now = datetime.now(settings.tz).strftime("%Y-%m-%d %H:%M (%a)")
-    messages: list[dict] = [{"role": "system", "content": f"{SYSTEM_PROMPT}\n현재 시각: {now} Asia/Seoul"}]
+    now = datetime.now(settings.tz)
+    system = (f"{SYSTEM_PROMPT}\n\n현재 시각: {now:%Y-%m-%d %H:%M} ({WEEKDAYS[now.weekday()]})\n"
+              f"[달력]\n{_calendar(now)}\n\n[지금 할 일]\n{_pending_snapshot(db)}")
+    messages: list[dict] = [{"role": "system", "content": system}]
     messages += [{"role": "user" if m.role == "user" else "assistant", "content": m.content} for m in reversed(history)]
     messages.append({"role": "user", "content": message})
 
@@ -146,7 +198,7 @@ def chat(db: Session, message: str) -> tuple[str, list[str]]:
     tools = build_tools(db, actions)
     reply = ""
     for _ in range(MAX_TOOL_ROUNDS):
-        resp = client.chat.completions.create(model=settings.ai_model, messages=messages, tools=TOOL_SCHEMAS)
+        resp = _complete(client, messages=messages, tools=TOOL_SCHEMAS)
         msg = resp.choices[0].message
         if not msg.tool_calls:
             reply = (msg.content or "").strip()
@@ -156,7 +208,7 @@ def chat(db: Session, message: str) -> tuple[str, list[str]]:
         for tc in msg.tool_calls:
             messages.append({"role": "tool", "tool_call_id": tc.id,
                              "content": _run_tool(tools, tc.function.name, tc.function.arguments)})
-    reply = reply or "처리했어!"
+    reply = _clean_reply(reply) or ("처리했어." if actions else "무슨 말인지 잘 모르겠어. 다시 말해 줄래?")
 
     db.add_all([ChatMessage(role="user", content=message), ChatMessage(role="assistant", content=reply)])
     db.commit()
@@ -164,6 +216,5 @@ def chat(db: Session, message: str) -> tuple[str, list[str]]:
 
 
 def generate_text(prompt: str) -> str:
-    resp = _client().chat.completions.create(
-        model=settings.ai_model, messages=[{"role": "user", "content": prompt}])
+    resp = _complete(_client(), messages=[{"role": "user", "content": prompt}])
     return (resp.choices[0].message.content or "").strip()
