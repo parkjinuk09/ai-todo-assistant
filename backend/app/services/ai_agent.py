@@ -93,7 +93,7 @@ def _pending_snapshot(db: Session, now: datetime) -> str:
         if not t.due_at:
             groups["마감 없음"].append(line)
             continue
-        d = t.due_at.astimezone(settings.tz)
+        d = todo_service._aware(t.due_at)
         diff = (d.date() - now.date()).days
         key = "마감 지남" if d < now and diff < 0 else {0: "오늘 마감", 1: "내일 마감", 2: "모레 마감"}.get(diff, "그 뒤")
         groups[key].append(f"  - {t.title} ({d:%m-%d} {WEEKDAYS[d.weekday()]} {d:%H:%M}) [id={t.id}]")
@@ -230,7 +230,7 @@ def answer_query(db: Session, message: str, now: datetime) -> str:
     pending = todo_service.list_todos(db, done=False)
 
     def local(t):
-        return t.due_at.astimezone(settings.tz)
+        return todo_service._aware(t.due_at)
 
     def item(t, with_date=False):
         if not t.due_at:
