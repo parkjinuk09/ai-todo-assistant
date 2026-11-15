@@ -64,6 +64,8 @@ npm run dev                                # http://localhost:5173
 테스트: `cd backend && .venv/bin/pytest` / 부하 테스트: [k6/README.md](k6/README.md)
 
 ## 배포 (Vercel, 무료 티어)
+- 웹: https://ai-todo-web-rho.vercel.app · API: https://ai-todo-api.vercel.app (`/docs`)
+
 | 대상 | 서비스 | 설정 |
 |---|---|---|
 | API | Vercel Python (FastAPI, root: `backend`, 엔트리 `index.py`) | `CORS_ORIGINS` |
