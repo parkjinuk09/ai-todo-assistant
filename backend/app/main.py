@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import models  # noqa: F401  테이블 등록
-from app.api.routes import chat, todos
+from app.api.routes import chat, reports, todos
 from app.core.config import settings
 from app.core.database import Base, engine
 
@@ -17,6 +17,7 @@ app.add_middleware(
 )
 app.include_router(todos.router)
 app.include_router(chat.router)
+app.include_router(reports.router)
 
 
 @app.get("/health", tags=["health"])

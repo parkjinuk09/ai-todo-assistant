@@ -9,3 +9,4 @@ dist/
 dev-dist/
 .DS_Store
 k6/results/*.json
+.vite/
