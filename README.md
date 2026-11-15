@@ -10,6 +10,7 @@
 |---|---|
 | **비서** | "다음주 화요일 7시 발표 준비 추가" → 로컬 LLM(Ollama, `qwen2.5:7b`) tool calling으로 추가·수정·완료·삭제 |
 | **할 일** | 마감 기준으로 밀린 일 / 오늘 / 다가오는 일 / 날짜 없음 자동 분류, 완료 접기 |
+| **캘린더** | 월 보기, 날짜를 눌러 그날 할 일 보기·추가, 다른 날로 끌어다 놓으면 시간은 두고 날짜만 이동 |
 | **추천** | 남은 할 일을 보고 뭐부터 할지 한 번에 추천 |
 | **월간 기록** | 완료율, 마감 준수, 요일·분류 통계 + 회고. 지난 달은 확정 저장 |
 | **PWA** | Chrome에서 Dock에 앱으로 설치 |
@@ -85,6 +86,7 @@ npm run dev                                # http://localhost:5173
 | 03 | [Redis + k6](docs/dev-log/03-redis-k6.md) | 1차 실패 원인 분석, 바이트 캐싱, UPSERT, stampede 락 |
 | 04 | [LLM 제공자 전환](docs/dev-log/04-ai-gateway.md) | Gemini SDK → AI Gateway, 수동 tool loop, OIDC 인증 |
 | 05 | [로컬 LLM + 화면 재설계](docs/dev-log/05-ollama-redesign.md) | 작은 모델: 날짜는 코드가 계산, 조회는 DB로, 거짓 성공 방지 / 대체 문장 캐시 버그 / UI 정리 |
+| 06 | [맥 스타일 화면 + 캘린더](docs/dev-log/06-mac-ui-calendar.md) | 반투명 재질 토큰, 다크 모드, 캘린더 끌어 옮기기, 좁은 화면 점 표시 |
 
 포트폴리오 요약: [docs/PORTFOLIO.md](docs/PORTFOLIO.md)
 

@@ -38,10 +38,14 @@ export function useTodos() {
     setTodos((ts) => ts.map((t) => (t.id === todo.id ? { ...t, done: !t.done } : t)));
     return run(() => api.updateTodo(todo.id, { done: !todo.done }));
   };
+  const update = (id, body) => {
+    setTodos((ts) => ts.map((t) => (t.id === id ? { ...t, ...body } : t)));
+    return run(() => api.updateTodo(id, body));
+  };
   const remove = (id) => {
     setTodos((ts) => ts.filter((t) => t.id !== id));
     return run(() => api.deleteTodo(id));
   };
 
-  return { todos, setTodos, loading, error, clearError: () => setError(null), add, toggle, remove };
+  return { todos, setTodos, loading, error, clearError: () => setError(null), add, toggle, update, remove };
 }

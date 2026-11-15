@@ -14,18 +14,26 @@ function Elapsed() {
 /** 서버가 보낸 안내문의 `명령어` 부분만 코드 모양으로 */
 function Problem({ text }) {
   return (text || "").split("`").map((part, i) =>
-    i % 2 ? <code key={i} className="rounded bg-line px-1">{part}</code> : <span key={i}>{part}</span>);
+    i % 2 ? <code key={i} className="rounded bg-field px-1 font-mono text-[11.5px]">{part}</code> : <span key={i}>{part}</span>);
 }
 
 function Message({ msg }) {
-  const who = msg.role === "user" ? "나" : msg.role === "error" ? "오류" : "비서";
+  if (msg.role === "user") {
+    return (
+      <div className="flex justify-end">
+        <p className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-accent px-3 py-1.5 text-white">{msg.content}</p>
+      </div>
+    );
+  }
+  const error = msg.role === "error";
   return (
-    <div className="py-2">
-      <p className={`text-[11px] font-semibold ${msg.role === "error" ? "text-accent" : "text-mute"}`}>{who}</p>
-      <p className={`whitespace-pre-wrap ${msg.role === "error" ? "text-accent" : ""}`}>{msg.content}</p>
+    <div className="max-w-[90%]">
+      <p className={`whitespace-pre-wrap rounded-2xl rounded-bl-md px-3 py-1.5 ${error ? "bg-danger/10 text-danger" : "bg-field"}`}>
+        {msg.content}
+      </p>
       {msg.actions?.length > 0 && (
-        <ul className="mt-1 text-[12px] text-mute">
-          {msg.actions.map((a, i) => <li key={i}>→ {a}</li>)}
+        <ul className="mt-1 px-1 text-[11.5px] text-mute">
+          {msg.actions.map((a, i) => <li key={i}>✓ {a}</li>)}
         </ul>
       )}
     </div>
@@ -49,60 +57,67 @@ export default function ChatPane({ messages, sending, onSend, health }) {
 
   return (
     <div className="flex h-full min-h-[420px] flex-col">
-      <div className="flex items-baseline justify-between border-b border-line pb-2">
-        <h2 className="font-semibold">비서</h2>
-        <span className="text-[12px] text-mute">
-          {!health.checked ? "확인 중" : health.llm ? `${health.model} · 로컬` : "사용 불가"}
+      <div className="flex items-center justify-between px-4 pb-2 pt-4">
+        <h2 className="text-[13px] font-semibold">비서</h2>
+        <span className="flex items-center gap-1.5 text-[11.5px] text-mute">
+          <span className={`size-1.5 rounded-full ${!health.checked ? "bg-faint" : health.llm ? "bg-c-health" : "bg-danger"}`} />
+          {!health.checked ? "확인 중" : health.llm ? health.model : "꺼짐"}
         </span>
       </div>
 
       {health.checked && !health.llm && (
-        <div className="mt-3 border-l-2 border-accent pl-3 text-[13px]">
+        <div className="mx-3 rounded-lg bg-field px-3 py-2 text-[12px] leading-relaxed">
           <Problem text={health.problem} />{" "}
-          <button onClick={health.recheck} className="underline underline-offset-4">다시 확인</button>
+          <button onClick={health.recheck} className="font-medium text-accent">다시 확인</button>
         </div>
       )}
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-2">
         {messages.length === 0 && health.llm && (
-          <div className="py-3 text-[13px] text-mute">
-            <p>이런 식으로 말하면 돼:</p>
-            <ul className="mt-1">
-              {EXAMPLES.map((ex) => (
-                <li key={ex}>
-                  <button onClick={() => submit(ex)} className="text-left underline-offset-4 hover:text-ink hover:underline">“{ex}”</button>
-                </li>
-              ))}
-            </ul>
+          <div className="mt-auto flex flex-col items-start gap-1.5 text-[12px]">
+            <p className="px-1 text-mute">이렇게 말하면 돼</p>
+            {EXAMPLES.map((ex) => (
+              <button key={ex} onClick={() => submit(ex)} className="rounded-full bg-field px-3 py-1 text-left hover:bg-selected">
+                {ex}
+              </button>
+            ))}
           </div>
         )}
         {messages.map((m) => <Message key={m.id} msg={m} />)}
         {sending && (
-          <p className="py-2 text-[13px] text-mute">처리 중… <Elapsed /> (로컬 모델이라 10~20초 걸릴 수 있어)</p>
+          <p className="px-1 text-[12px] text-mute">생각하는 중… <Elapsed /></p>
         )}
         <div ref={bottom} />
       </div>
 
-      <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="flex items-end gap-2 border-t border-line pt-2">
-        <textarea
-          rows={2}
-          value={text}
-          disabled={!health.llm}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            // 한글 조합 중 Enter는 무시 (마지막 글자 중복 전송 방지), Shift+Enter는 줄바꿈
-            if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              submit();
-            }
-          }}
-          placeholder={health.llm ? "말로 시키기 (Enter 전송, Shift+Enter 줄바꿈)" : "지금은 입력할 수 없어"}
-          aria-label="비서에게 메시지"
-          className="min-w-0 flex-1 resize-none rounded border border-line bg-white px-2 py-1.5 outline-none focus:border-ink disabled:bg-transparent"
-        />
-        <button disabled={!ready || !text.trim()} className="rounded bg-ink px-3 py-1.5 text-[13px] font-medium text-paper disabled:opacity-30">
-          보내기
-        </button>
+      <form onSubmit={(e) => { e.preventDefault(); submit(); }} className="p-3 pt-1">
+        <div className="flex items-end gap-1.5 rounded-[18px] bg-field py-1 pl-3 pr-1 focus-within:shadow-[0_0_0_3px_rgb(0_122_255/0.3)]">
+          <textarea
+            rows={1}
+            value={text}
+            disabled={!health.llm}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              // 한글 조합 중 Enter는 무시 (마지막 글자 중복 전송 방지), Shift+Enter는 줄바꿈
+              if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                e.preventDefault();
+                submit();
+              }
+            }}
+            placeholder={health.llm ? "메시지" : "지금은 쓸 수 없어"}
+            aria-label="비서에게 메시지"
+            className="max-h-28 min-w-0 flex-1 resize-none bg-transparent py-1 outline-none [field-sizing:content] placeholder:text-mute"
+          />
+          <button
+            disabled={!ready || !text.trim()}
+            aria-label="보내기"
+            className="grid size-[26px] shrink-0 place-items-center rounded-full bg-accent text-white disabled:opacity-30"
+          >
+            <svg viewBox="0 0 16 16" className="size-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M8 13V3M3.5 7.5 8 3l4.5 4.5" />
+            </svg>
+          </button>
+        </div>
       </form>
     </div>
   );
