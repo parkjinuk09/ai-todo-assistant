@@ -20,7 +20,7 @@
 | Backend | FastAPI, SQLAlchemy 2.0, Pydantic v2, PostgreSQL 16 (JSONB), Redis 7 |
 | AI | Ollama 로컬 모델 (OpenAI 호환 API, tool calling). `LLM_BASE_URL`만 바꾸면 다른 OpenAI 호환 서버로 교체 |
 | Frontend | React 19, Vite, Tailwind CSS v4, vite-plugin-pwa |
-| Test | pytest (21), fakeredis, k6 |
+| Test | pytest (36), fakeredis, k6 |
 | CI | GitHub Actions (pytest → 프론트 빌드 → k6 smoke) |
 
 ## 아키텍처
@@ -82,7 +82,7 @@ npm run dev                                # http://localhost:5173
 | 02 | [월간 리포트](docs/dev-log/02-monthly-report.md) | SQL 집계(FILTER/CASE), JSONB 확정 저장 |
 | 03 | [Redis + k6](docs/dev-log/03-redis-k6.md) | 1차 실패 원인 분석, 바이트 캐싱, UPSERT, stampede 락 |
 | 04 | [LLM 제공자 전환](docs/dev-log/04-ai-gateway.md) | Gemini SDK → AI Gateway, 수동 tool loop, OIDC 인증 |
-| 05 | [로컬 LLM + 화면 재설계](docs/dev-log/05-ollama-redesign.md) | 작은 모델에 맞춘 프롬프트, 대체 문장 캐시 버그, 쓸모없는 UI 정리 |
+| 05 | [로컬 LLM + 화면 재설계](docs/dev-log/05-ollama-redesign.md) | 작은 모델: 날짜는 코드가 계산, 조회는 DB로, 거짓 성공 방지 / 대체 문장 캐시 버그 / UI 정리 |
 
 포트폴리오 요약: [docs/PORTFOLIO.md](docs/PORTFOLIO.md)
 
