@@ -94,3 +94,36 @@ export function isoToLocalInput(iso) {
   const d = new Date(iso);
   return `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
+
+/**
+ * 손으로 친 시간을 'HH:MM'으로. 못 알아보면 null.
+ * "15:30", "1530", "15", "오후 3시", "오후 3시 30분", "3시 반", "오전 9:05"
+ */
+export function parseTime(text) {
+  const t = (text || "").trim();
+  if (!t) return null;
+  const pm = /오후|pm/i.test(t);
+  const am = /오전|am/i.test(t);
+  const half = /반/.test(t);
+  const nums = t.match(/\d+/g);
+  if (!nums) return null;
+  let h, m;
+  if (nums.length === 1 && nums[0].length >= 3 && nums[0].length <= 4) {
+    h = Number(nums[0].slice(0, -2));
+    m = Number(nums[0].slice(-2));
+  } else {
+    h = Number(nums[0]);
+    m = nums[1] ? Number(nums[1]) : half ? 30 : 0;
+  }
+  if (pm && h < 12) h += 12;
+  if (am && h === 12) h = 0;
+  if (h > 23 || m > 59) return null;
+  return `${pad(h)}:${pad(m)}`;
+}
+
+export const CATEGORY_OPTIONS = CATEGORIES.map((c) => ({ value: c, label: c, color: CATEGORY_COLOR[c] }));
+export const PRIORITY_OPTIONS = [
+  { value: 1, label: "중요", color: "var(--color-danger)" },
+  { value: 2, label: "보통" },
+  { value: 3, label: "나중에" },
+];
