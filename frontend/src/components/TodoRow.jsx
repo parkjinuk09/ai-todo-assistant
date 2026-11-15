@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { CATEGORIES, CATEGORY_COLOR, dueText, isLate, isoToLocalInput, localInputToIso, time } from "../lib/format";
+import { CATEGORY_COLOR, CATEGORY_OPTIONS, PRIORITY_OPTIONS, dueText, isLate, isoToLocalInput, localInputToIso, time } from "../lib/format";
+import { DuePicker, Select } from "./Pickers";
 
 /** 미리알림 앱처럼 동그란 체크 */
 export function Check({ done, onClick, label }) {
@@ -32,6 +33,7 @@ function EditForm({ todo, onSave, onCancel }) {
   });
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
+  const pick = (k) => (v) => setForm((f) => ({ ...f, [k]: v }));
 
   const submit = async (e) => {
     e.preventDefault();
@@ -63,20 +65,9 @@ function EditForm({ todo, onSave, onCancel }) {
           className="field w-full"
         />
         <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
-          <input type="datetime-local" value={form.due} onChange={set("due")} aria-label="마감" className="field num" />
-          {form.due && (
-            <button type="button" onClick={() => setForm((f) => ({ ...f, due: "" }))} className="btn-plain">
-              날짜 지우기
-            </button>
-          )}
-          <select value={form.category} onChange={set("category")} aria-label="분류" className="field">
-            {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
-          </select>
-          <select value={form.priority} onChange={set("priority")} aria-label="중요도" className="field">
-            <option value={1}>중요</option>
-            <option value={2}>보통</option>
-            <option value={3}>나중에</option>
-          </select>
+          <DuePicker value={form.due} onChange={pick("due")} />
+          <Select label="분류" value={form.category} onChange={pick("category")} options={CATEGORY_OPTIONS} />
+          <Select label="중요도" value={form.priority} onChange={pick("priority")} options={PRIORITY_OPTIONS} />
           <span className="ml-auto flex gap-1">
             <button type="button" onClick={onCancel} className="btn-plain">취소</button>
             <button disabled={!form.title.trim() || busy} className="btn-primary">{busy ? "저장 중" : "저장"}</button>
