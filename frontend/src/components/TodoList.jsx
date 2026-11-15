@@ -20,11 +20,11 @@ export function Group({ title, danger, children }) {
   );
 }
 
-export default function TodoList({ todos, loading, onAdd, onToggle, onDelete }) {
+export default function TodoList({ todos, loading, onAdd, onToggle, onDelete, onUpdate }) {
   const [showDone, setShowDone] = useState(false);
   const g = groupTodos(todos);
   const pending = todos.length - g.done.length;
-  const handlers = { onToggle, onDelete };
+  const handlers = { onToggle, onDelete, onUpdate };
 
   return (
     <div className="mx-auto max-w-2xl">

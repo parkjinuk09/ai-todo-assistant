@@ -87,3 +87,10 @@ export function moveToDay(iso, dayKey) {
 export function localInputToIso(value) {
   return value ? new Date(value).toISOString() : null;
 }
+
+// ISO → <input type="datetime-local"> 값 (로컬 시간 'YYYY-MM-DDTHH:MM')
+export function isoToLocalInput(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  return `${ymd(d)}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
