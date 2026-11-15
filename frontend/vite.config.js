@@ -16,8 +16,8 @@ export default defineConfig({
         description: "로컬 모델 비서가 붙은 개인 할 일 목록",
         start_url: "/",
         display: "standalone",
-        background_color: "#f6f4ef",
-        theme_color: "#f6f4ef",
+        background_color: "#e4e4e8",
+        theme_color: "#e4e4e8",
         icons: [
           { src: "/icon-192.png", sizes: "192x192", type: "image/png" },
           { src: "/icon-512.png", sizes: "512x512", type: "image/png" },

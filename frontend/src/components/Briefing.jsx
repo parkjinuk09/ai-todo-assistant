@@ -20,11 +20,11 @@ export default function Briefing({ hasPending }) {
   };
 
   return (
-    <div className="py-3 text-[13px]">
-      <button onClick={load} disabled={loading} className="text-mute underline underline-offset-4 hover:text-ink disabled:no-underline">
+    <div className="mt-3">
+      {text && <p className="group-box mb-1.5 whitespace-pre-wrap px-3 py-2.5">{text}</p>}
+      <button onClick={load} disabled={loading} className="btn-plain text-[12px] !text-accent disabled:opacity-60">
         {loading ? "추천 받는 중…" : text ? "다시 추천받기" : "오늘 뭐부터 할지 추천받기"}
       </button>
-      {text && <p className="mt-2 whitespace-pre-wrap border-l-2 border-ink pl-3">{text}</p>}
     </div>
   );
 }
