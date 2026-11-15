@@ -1,13 +1,15 @@
 from zoneinfo import ZoneInfo
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: str = "sqlite:///./local.db"
-    redis_url: str = ""
+    # Vercel Marketplace(Neon/Upstash)가 주입하는 변수 이름도 함께 인식
+    database_url: str = Field("sqlite:///./local.db", validation_alias=AliasChoices("DATABASE_URL", "POSTGRES_URL"))
+    redis_url: str = Field("", validation_alias=AliasChoices("REDIS_URL", "KV_URL"))
     cache_enabled: bool = True
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash"

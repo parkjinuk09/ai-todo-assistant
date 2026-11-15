@@ -60,13 +60,16 @@ npm run dev                                # http://localhost:5173
 ```
 테스트: `cd backend && .venv/bin/pytest` / 부하 테스트: [k6/README.md](k6/README.md)
 
-## 배포 (무료 티어)
+## 배포 (Vercel, 무료 티어)
 | 대상 | 서비스 | 설정 |
 |---|---|---|
-| DB | Neon | `DATABASE_URL` |
-| Cache | Upstash Redis | `REDIS_URL` (`rediss://...`) |
-| API | Render (Docker, `backend/Dockerfile`) | `DATABASE_URL`, `REDIS_URL`, `GEMINI_API_KEY`, `CORS_ORIGINS` |
-| Web | Vercel (root: `frontend`) | `VITE_API_URL` |
+| API | Vercel Python (FastAPI, root: `backend`, 엔트리 `index.py`) | `GEMINI_API_KEY`, `CORS_ORIGINS` |
+| DB | Neon (Vercel Marketplace) | `DATABASE_URL` 자동 주입 |
+| Cache | Upstash Redis (Vercel Marketplace) | `KV_URL` 자동 주입 (`REDIS_URL`도 인식) |
+| Web | Vercel (root: `frontend`, Vite) | `VITE_API_URL` |
+
+- 서버리스에서는 `NullPool` 사용 + Neon pooled endpoint로 커넥션 고갈 방지
+- `backend/Dockerfile`로 Render/Fly 등 컨테이너 환경에도 배포 가능
 
 ## 개발 기록
 | # | 문서 | 내용 |
