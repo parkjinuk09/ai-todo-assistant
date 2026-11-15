@@ -49,7 +49,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col md:flex-row">
       {/* 사이드바 */}
-      <aside className="flex shrink-0 flex-col border-line bg-sidebar backdrop-blur-2xl backdrop-saturate-150 max-md:border-b md:w-[212px] md:border-r">
+      <aside className="app-sidebar flex shrink-0 flex-col border-line bg-sidebar backdrop-blur-2xl backdrop-saturate-150 max-md:border-b md:w-[212px] md:border-r">
         <div className="px-4 pb-2 pt-4 md:pt-6">
           <p className="text-[11px] font-medium text-mute">오늘</p>
           <p className="num text-[15px] font-semibold">{todayLabel()}</p>

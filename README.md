@@ -101,7 +101,9 @@ npm run dev                                # http://localhost:5173
 ./mac/uninstall.sh   # 해제 (할 일 데이터는 그대로)
 ```
 - `⌘⇧D`: 입력창 열기/닫기. Enter로 보내고 Esc로 닫기
-- 웹 화면은 http://localhost:8000 (백엔드가 같이 내려 줌)
+- Launchpad·Spotlight에서 **할 일** 앱을 열거나 메뉴 막대의 "할 일 열기" → 브라우저 없이 독립 창 (할 일·캘린더·월간 기록·비서)
+- 창에서 `⌘Q`는 창만 닫음. 완전 종료는 메뉴 막대 아이콘 → 종료
+- 브라우저로 보려면 http://localhost:8000
 - 코드를 고친 뒤에는 `install.sh`를 다시 실행하면 반영
 - 필요한 것: Docker Desktop, Ollama(`qwen2.5:7b`), Xcode 명령줄 도구
 

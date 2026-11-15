@@ -17,7 +17,16 @@ export function useTodos() {
     }
   }, []);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+    // 다른 곳(맥 빠른 추가, 메뉴 막대)에서 바뀐 내용을 반영: 창으로 돌아올 때 + 맥 앱이 보내는 신호
+    window.addEventListener("focus", refresh);
+    window.addEventListener("todos-changed", refresh);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("todos-changed", refresh);
+    };
+  }, [refresh]);
 
   // 낙관적 업데이트가 실패하면 서버 상태로 되돌리고 에러를 보여준다
   const run = async (fn) => {
