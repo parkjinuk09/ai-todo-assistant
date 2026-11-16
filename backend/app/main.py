@@ -7,10 +7,11 @@ from fastapi.staticfiles import StaticFiles
 from app import models  # noqa: F401  테이블 등록
 from app.api.routes import chat, reports, todos
 from app.core.config import settings
-from app.core.database import Base, engine
+from app.core.database import Base, add_missing_columns, engine
 from app.services import ai_agent
 
 Base.metadata.create_all(engine)
+add_missing_columns()
 
 app = FastAPI(title="AI Todo Assistant API", version="0.1.0")
 app.add_middleware(

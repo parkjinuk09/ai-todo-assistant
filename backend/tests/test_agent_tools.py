@@ -165,3 +165,78 @@ def test_clean_reply_hides_bare_bracket_ids():
     from app.services.ai_agent import _clean_reply
 
     assert _clean_reply("은행 가기 [18940], 발표 [18939]") == "은행 가기, 발표"
+
+
+def _no_llm(monkeypatch):
+    def boom():
+        raise AssertionError("LLM을 부르면 안 된다")
+
+    monkeypatch.setattr(ai_agent, "_client", boom)
+
+
+def test_quick_delete_and_complete_without_llm(client, monkeypatch):
+    _no_llm(monkeypatch)
+    client.post("/todos", json={"title": "치과 예약"})
+    client.post("/todos", json={"title": "빨래"})
+    body = client.post("/chat", json={"message": "치과 예약 삭제해줘"}).json()
+    assert body["actions"] == ["삭제: 치과 예약"] and [t["title"] for t in body["todos"]] == ["빨래"]
+    body = client.post("/chat", json={"message": "빨래 완료"}).json()
+    assert body["actions"] == ["완료: 빨래"] and body["todos"][0]["done"] is True
+
+
+def test_quick_command_asks_when_ambiguous(client, monkeypatch):
+    _no_llm(monkeypatch)
+    client.post("/todos", json={"title": "영어 단어"})
+    client.post("/todos", json={"title": "영어 회화"})
+    body = client.post("/chat", json={"message": "영어 지워"}).json()
+    assert body["actions"] == [] and "영어 단어" in body["reply"] and len(body["todos"]) == 2
+
+
+def test_quick_command_leaves_unclear_requests_to_llm():
+    db = SessionLocal()
+    build_tools(db, [])["add_todo"](title="치과 예약")
+    assert ai_agent.quick_command(db, "치과 예약 취소 전화하기 추가") is None   # 추가 요청
+    assert ai_agent.quick_command(db, "치과 예약 내일로 바꿔") is None          # 수정은 LLM
+    assert ai_agent.quick_command(db, "없는 일 삭제") is None                   # 못 찾으면 LLM
+    db.close()
+
+
+def test_gibberish_changes_nothing(client, monkeypatch):
+    _no_llm(monkeypatch)
+    body = client.post("/chat", json={"message": "ㄴㅇㄹㅇㄴㄹ"}).json()
+    assert body["actions"] == [] and "모르겠어" in body["reply"]
+
+
+def test_add_todo_does_not_duplicate():
+    db = SessionLocal()
+    actions: list[str] = []
+    t = build_tools(db, actions)
+    first = t["add_todo"](title="독후감", due_at="2026-11-20T18:00")
+    again = t["add_todo"](title="독후감", due_at="2026-11-20T18:00")
+    assert again["id"] == first["id"] and again["already_exists"] and len(t["list_todos"]()) == 1
+    assert actions == ["추가: 독후감"]
+    later: list[str] = []
+    build_tools(db, later)["add_todo"](title="독후감", due_at="2026-11-20T18:00")
+    assert later == ["이미 있음: 독후감"]
+    db.close()
+
+
+def test_date_only_and_midnight_become_all_day_and_repeat_is_saved():
+    db = SessionLocal()
+    t = build_tools(db, [])
+    t["add_todo"](title="선물 사기", due_at="2026-12-03T00:00")
+    made = t["add_todo"](title="영어 공부", due_at="2026-11-20T20:00", repeat="daily")
+    got = {x.title: x for x in ai_agent.todo_service.list_todos(db)}
+    assert got["선물 사기"].all_day and got["선물 사기"].due_at.hour == 23
+    assert not got["영어 공부"].all_day and got["영어 공부"].repeat == "daily"
+    t["update_todo"](made["id"], repeat="none")
+    db.expire_all()
+    assert ai_agent.todo_service.get_todo(db, made["id"]).repeat is None
+    db.close()
+
+
+def test_clean_reply_drops_date_hint_and_iso():
+    from app.services.ai_agent import _clean_reply
+
+    assert _clean_reply('"선물 사기"를 추가했어. (날짜 참고: 2026-12-03T00:00)') == '"선물 사기"를 추가했어.'
+    assert _clean_reply("마감은 2026-12-03T15:00:00+09:00 이야.") == "마감은 12월 3일 이야."
