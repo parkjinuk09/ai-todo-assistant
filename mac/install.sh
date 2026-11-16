@@ -29,10 +29,11 @@ echo "3/4 메뉴 막대 앱 빌드"
 rm -rf "$APP"
 mkdir -p "$APP/Contents/MacOS"
 cp "$REPO/mac/QuickTodo/Info.plist" "$APP/Contents/Info.plist"
-# 앱 아이콘: 웹 아이콘(512px)에서 크기별로 만들어 icns로 묶는다
+# 앱 아이콘: 맥용 원본(1024px, 둥근 사각형)에서 크기별로 만들어 icns로 묶는다 (원본은 scripts/make_icons.py 로 생성)
 ICONSET="$(mktemp -d)/AppIcon.iconset"; mkdir -p "$ICONSET" "$APP/Contents/Resources"
 for size in 16 32 128 256 512; do
-  sips -z $size $size "$REPO/frontend/public/icon-512.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  sips -z $size $size "$REPO/mac/QuickTodo/AppIcon.png" --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+  sips -z $((size * 2)) $((size * 2)) "$REPO/mac/QuickTodo/AppIcon.png" --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
 done
 iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 swiftc -O "$REPO/mac/QuickTodo/main.swift" -o "$APP/Contents/MacOS/QuickTodo"
