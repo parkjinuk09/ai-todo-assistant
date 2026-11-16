@@ -44,7 +44,9 @@ def test_web_dist_is_served_after_api_routes(tmp_path, monkeypatch):
     reloaded = importlib.reload(main_module)
     try:
         c = TestClient(reloaded.app)
-        assert "web" in c.get("/").text
+        page = c.get("/")
+        assert "web" in page.text
+        assert page.headers["cache-control"] == "no-cache"  # 재설치 후 옛 화면 방지
         assert c.get("/health").json()["status"] == "ok"
     finally:
         monkeypatch.setattr(config.settings, "web_dist", "")

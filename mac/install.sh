@@ -12,7 +12,7 @@ UID_="$(id -u)"
 mkdir -p "$AGENTS" "$LOGS" "$HOME/Applications" "$RUN"
 
 echo "1/4 웹 화면 빌드"
-VITE_API_URL=http://localhost:8000 npm --prefix "$REPO/frontend" run build --silent >/dev/null
+LOCAL_APP=1 VITE_API_URL=http://localhost:8000 npm --prefix "$REPO/frontend" run build --silent >/dev/null
 
 echo "2/4 실행용 사본 만들기 ($RUN)"
 rsync -a --delete --exclude .venv --exclude __pycache__ --exclude tests --exclude '*.db' --exclude .pytest_cache \

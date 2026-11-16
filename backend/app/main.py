@@ -34,4 +34,13 @@ def health():
 
 # 라우트를 다 등록한 뒤에 붙여야 API 경로가 먼저 잡힌다
 if settings.web_dist and Path(settings.web_dist).is_dir():
-    app.mount("/", StaticFiles(directory=settings.web_dist, html=True), name="web")
+    class WebFiles(StaticFiles):
+        """index.html은 매번 새로 확인하게 한다. 안 그러면 다시 설치해도 옛 화면이 캐시에서 뜬다."""
+
+        async def get_response(self, path, scope):
+            response = await super().get_response(path, scope)
+            if not path.startswith("assets/"):  # assets는 파일 이름에 해시가 있어 캐시해도 안전
+                response.headers["Cache-Control"] = "no-cache"
+            return response
+
+    app.mount("/", WebFiles(directory=settings.web_dist, html=True), name="web")

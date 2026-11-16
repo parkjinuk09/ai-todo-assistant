@@ -198,6 +198,8 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate {
         w.delegate = self
 
         let config = WKWebViewConfiguration()
+        // 저장소를 남기지 않는다: 앱을 다시 설치했을 때 캐시된 옛 화면이 뜨지 않게
+        config.websiteDataStore = .nonPersistent()
         // 웹 화면이 '앱 안'임을 알고 신호등 버튼 자리를 비우게 한다
         config.userContentController.addUserScript(WKUserScript(
             source: "document.documentElement.classList.add('mac-app')", injectionTime: .atDocumentStart, forMainFrameOnly: true))
@@ -205,7 +207,7 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate {
         v.navigationDelegate = self
         v.allowsBackForwardNavigationGestures = false
         w.contentView = v
-        v.load(URLRequest(url: webURL))
+        v.load(URLRequest(url: webURL, cachePolicy: .reloadIgnoringLocalCacheData))
         window = w
         web = v
     }
@@ -221,7 +223,7 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate {
 
     // 로그인 직후처럼 서버가 아직 안 떴으면 잠시 뒤 다시 시도
     func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { webView.load(URLRequest(url: webURL)) }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { webView.load(URLRequest(url: webURL, cachePolicy: .reloadIgnoringLocalCacheData)) }
     }
 
     // 바깥 링크는 기본 브라우저로
