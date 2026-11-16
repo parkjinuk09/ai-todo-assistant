@@ -152,20 +152,32 @@ export function inputToDue(value) {
   return { due_at: new Date(y, m - 1, d, 23, 59).toISOString(), all_day: true };
 }
 
-/** 미루기 선택지: [{ label, hint, body }] */
+/**
+ * 미루기 선택지: [{ label, hint, body }]. 지금 마감보다 늦은 것만 보여준다.
+ * 마감이 오늘 이전이면 오늘 기준(오늘 저녁·내일·다음 주), 이미 내일 이후면 그 마감 기준(하루 뒤·일주일 뒤).
+ */
 export function snoozeOptions(todo, now = new Date()) {
   const at = (h) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, 0);
-  const day = (n) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
+  const plus = (base, n) => new Date(base.getFullYear(), base.getMonth(), base.getDate() + n);
   // 날짜만 옮기고 시간은 그대로. 마감이 없던 일은 하루 종일로
   const keep = (d) =>
     todo.due_at ? { due_at: moveToDay(todo.due_at, ymd(d)), all_day: !!todo.all_day } : inputToDue(ymd(d));
   const label = (d) => `${d.getMonth() + 1}/${d.getDate()} (${WEEKDAY[d.getDay()]})`;
+  const due = todo.due_at ? new Date(todo.due_at) : null;
+  const monday = plus(now, ((8 - now.getDay()) % 7) || 7);
   const out = [];
-  if (now.getHours() < 18) out.push({ label: "오늘 저녁", hint: "오후 6시", body: { due_at: at(18).toISOString(), all_day: false } });
-  else if (now.getHours() < 21) out.push({ label: "오늘 밤", hint: "오후 9시", body: { due_at: at(21).toISOString(), all_day: false } });
-  const tomorrow = day(1);
-  const monday = day(((8 - now.getDay()) % 7) || 7);
-  out.push({ label: "내일", hint: label(tomorrow), body: keep(tomorrow) });
+
+  if (due && dayDiff(due, now) > 0) {
+    out.push({ label: "하루 뒤", hint: label(plus(due, 1)), body: keep(plus(due, 1)) });
+    if (dayDiff(monday, due) > 1) out.push({ label: "다음 주", hint: label(monday), body: keep(monday) });
+    out.push({ label: "일주일 뒤", hint: label(plus(due, 7)), body: keep(plus(due, 7)) });
+    return out;
+  }
+  const evening = now.getHours() < 18 ? ["오늘 저녁", "오후 6시", at(18)] : now.getHours() < 21 ? ["오늘 밤", "오후 9시", at(21)] : null;
+  if (evening && (!due || evening[2] > due)) {
+    out.push({ label: evening[0], hint: evening[1], body: { due_at: evening[2].toISOString(), all_day: false } });
+  }
+  out.push({ label: "내일", hint: label(plus(now, 1)), body: keep(plus(now, 1)) });
   out.push({ label: "다음 주", hint: label(monday), body: keep(monday) });
   return out;
 }
