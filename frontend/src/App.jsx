@@ -82,10 +82,7 @@ export default function App() {
             </p>
           )}
           {view === "todos" && (
-            <>
-              <h1 className="mx-auto mb-4 max-w-2xl px-1 text-[26px] font-bold leading-none tracking-tight">할 일</h1>
-              <TodoList todos={todo.todos} loading={todo.loading} onAdd={todo.add} onToggle={todo.toggle} onDelete={todo.remove} onUpdate={todo.update} />
-            </>
+            <TodoList todos={todo.todos} loading={todo.loading} onAdd={todo.add} onToggle={todo.toggle} onDelete={todo.remove} onUpdate={todo.update} onUndo={todo.undo} />
           )}
           {view === "calendar" && (
             <CalendarView todos={todo.todos} onAdd={todo.add} onToggle={todo.toggle} onDelete={todo.remove} onUpdate={todo.update} />
@@ -98,6 +95,14 @@ export default function App() {
           )}
         </div>
       </main>
+
+      {/* 방금 한 삭제·완료를 되돌리기 */}
+      {todo.toast && (
+        <div role="status" className="num fixed bottom-5 left-1/2 z-40 flex max-w-[90vw] -translate-x-1/2 items-center gap-3 rounded-xl bg-popover py-2 pl-3.5 pr-2 shadow-[0_0_0_0.5px_rgb(0_0_0/0.14),0_10px_32px_rgb(0_0_0/0.22)] backdrop-blur-2xl">
+          <span className="truncate">{todo.toast.text}</span>
+          <button onClick={todo.undo} className="btn-plain shrink-0 !text-accent">되돌리기</button>
+        </div>
+      )}
 
       {/* 비서 (1280px 이상에서는 항상 옆에) */}
       <aside className="hidden w-[320px] shrink-0 border-l border-line bg-sidebar backdrop-blur-2xl backdrop-saturate-150 xl:block">

@@ -170,6 +170,15 @@ final class QuickInput: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
 // MARK: - 할 일 창
 
+/// 창 맨 위의 투명한 띠: 잡고 끌면 창이 움직이고, 두 번 누르면 확대/축소 (보통의 제목 막대처럼)
+final class DragStrip: NSView {
+    static let height: CGFloat = 24
+    override func mouseDown(with event: NSEvent) {
+        if event.clickCount == 2 { window?.performZoom(nil) } else { window?.performDrag(with: event) }
+    }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+}
+
 final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate {
     private var window: NSWindow?
     private var web: WKWebView?
@@ -203,10 +212,18 @@ final class MainWindow: NSObject, NSWindowDelegate, WKNavigationDelegate {
         // 웹 화면이 '앱 안'임을 알고 신호등 버튼 자리를 비우게 한다
         config.userContentController.addUserScript(WKUserScript(
             source: "document.documentElement.classList.add('mac-app')", injectionTime: .atDocumentStart, forMainFrameOnly: true))
-        let v = WKWebView(frame: w.contentLayoutRect, configuration: config)
+        let v = WKWebView(frame: .zero, configuration: config)
         v.navigationDelegate = self
         v.allowsBackForwardNavigationGestures = false
-        w.contentView = v
+        // 웹 화면이 창 전체를 덮어서 제목 막대를 잡을 수 없다 → 맨 위에 투명한 손잡이를 얹는다
+        let box = NSView(frame: w.contentLayoutRect)
+        v.frame = box.bounds
+        v.autoresizingMask = [.width, .height]
+        box.addSubview(v)
+        let grip = DragStrip(frame: NSRect(x: 0, y: box.bounds.height - DragStrip.height, width: box.bounds.width, height: DragStrip.height))
+        grip.autoresizingMask = [.width, .minYMargin]
+        box.addSubview(grip)
+        w.contentView = box
         v.load(URLRequest(url: webURL, cachePolicy: .reloadIgnoringLocalCacheData))
         window = w
         web = v

@@ -23,7 +23,8 @@ export const api = {
   listTodos: () => request("/todos"),
   createTodo: (body) => request("/todos", { method: "POST", body }),
   updateTodo: (id, body) => request(`/todos/${id}`, { method: "PATCH", body }),
-  deleteTodo: (id) => request(`/todos/${id}`, { method: "DELETE" }),
+  // keepalive: 창을 닫는 순간에 보낸 삭제도 끝까지 가게
+  deleteTodo: (id) => request(`/todos/${id}`, { method: "DELETE", keepalive: true }),
   chatHistory: () => request("/chat"),
   sendChat: (message) => request("/chat", { method: "POST", body: { message } }),
   briefing: () => request("/briefing"),

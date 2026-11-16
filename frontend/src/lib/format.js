@@ -21,14 +21,15 @@ export function todayLabel(now = new Date()) {
 }
 
 /** 목록에서 보여줄 마감 표기. 오늘 것은 시간만, 지난 것은 며칠 지났는지. */
-export function dueText(iso, now = new Date()) {
+export function dueText(iso, now = new Date(), allDay = false) {
   if (!iso) return null;
   const d = new Date(iso);
   const diff = dayDiff(d, now);
-  if (diff === 0) return time(d);
-  if (diff === 1) return `내일 ${time(d)}`;
+  const clock = allDay ? "" : ` ${time(d)}`; // 하루 종일이면 날짜만
+  if (diff === 0) return allDay ? "오늘" : time(d);
+  if (diff === 1) return `내일${clock}`;
   if (diff < 0) return `${-diff}일 지남`;
-  return `${d.getMonth() + 1}/${d.getDate()} (${WEEKDAY[d.getDay()]}) ${time(d)}`;
+  return `${d.getMonth() + 1}/${d.getDate()} (${WEEKDAY[d.getDay()]})${clock}`;
 }
 
 export const isLate = (t, now = new Date()) => !t.done && !!t.due_at && new Date(t.due_at) < now;
@@ -127,3 +128,52 @@ export const PRIORITY_OPTIONS = [
   { value: 2, label: "보통" },
   { value: 3, label: "나중에" },
 ];
+
+export const REPEAT_OPTIONS = [
+  { value: "", label: "반복 안 함" },
+  { value: "daily", label: "매일" },
+  { value: "weekdays", label: "평일마다" },
+  { value: "weekly", label: "매주" },
+  { value: "monthly", label: "매월" },
+];
+export const REPEAT_LABEL = Object.fromEntries(REPEAT_OPTIONS.map((o) => [o.value, o.label]));
+
+/** 마감 고르기 값: 하루 종일이면 'YYYY-MM-DD', 시간이 있으면 'YYYY-MM-DDTHH:MM', 없으면 "" */
+export function dueToInput(todo) {
+  if (!todo.due_at) return "";
+  return todo.all_day ? ymd(new Date(todo.due_at)) : isoToLocalInput(todo.due_at);
+}
+
+/** 마감 고르기 값 → 서버에 보낼 { due_at, all_day } */
+export function inputToDue(value) {
+  if (!value) return { due_at: null, all_day: false };
+  if (value.includes("T")) return { due_at: new Date(value).toISOString(), all_day: false };
+  const [y, m, d] = value.split("-").map(Number);
+  return { due_at: new Date(y, m - 1, d, 23, 59).toISOString(), all_day: true };
+}
+
+/** 미루기 선택지: [{ label, hint, body }] */
+export function snoozeOptions(todo, now = new Date()) {
+  const at = (h) => new Date(now.getFullYear(), now.getMonth(), now.getDate(), h, 0);
+  const day = (n) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + n);
+  // 날짜만 옮기고 시간은 그대로. 마감이 없던 일은 하루 종일로
+  const keep = (d) =>
+    todo.due_at ? { due_at: moveToDay(todo.due_at, ymd(d)), all_day: !!todo.all_day } : inputToDue(ymd(d));
+  const label = (d) => `${d.getMonth() + 1}/${d.getDate()} (${WEEKDAY[d.getDay()]})`;
+  const out = [];
+  if (now.getHours() < 18) out.push({ label: "오늘 저녁", hint: "오후 6시", body: { due_at: at(18).toISOString(), all_day: false } });
+  else if (now.getHours() < 21) out.push({ label: "오늘 밤", hint: "오후 9시", body: { due_at: at(21).toISOString(), all_day: false } });
+  const tomorrow = day(1);
+  const monday = day(((8 - now.getDay()) % 7) || 7);
+  out.push({ label: "내일", hint: label(tomorrow), body: keep(tomorrow) });
+  out.push({ label: "다음 주", hint: label(monday), body: keep(monday) });
+  return out;
+}
+
+/** 검색: 제목·메모·하위 항목에서 찾는다 */
+export function matches(todo, query) {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  return [todo.title, todo.note, ...(todo.subtasks || []).map((s) => s.title)]
+    .some((text) => (text || "").toLowerCase().includes(q));
+}
