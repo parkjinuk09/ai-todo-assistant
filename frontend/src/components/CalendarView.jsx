@@ -147,7 +147,7 @@ export default function CalendarView({ todos, onAdd, onToggle, onDelete, onUpdat
           {selected === today && <span className="ml-1.5 text-[12px] font-normal text-danger">오늘</span>}
         </h3>
         <div className="mt-2">
-          <AddTodo onSubmit={onAdd} defaultDue={`${selected}T09:00`} placeholder="이 날에 할 일 추가" />
+          <AddTodo onSubmit={onAdd} defaultDue={selected} placeholder="이 날에 할 일 추가" />
         </div>
         {selItems.length > 0 ? (
           <Group>

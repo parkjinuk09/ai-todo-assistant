@@ -72,22 +72,24 @@ const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + 
 const TIMES = [["09:00", "오전 9시"], ["12:00", "정오"], ["15:00", "오후 3시"], ["18:00", "오후 6시"], ["21:00", "오후 9시"]];
 
 function dueLabel(value) {
-  const d = new Date(value);
+  const allDay = !value.includes("T");
+  const d = new Date(allDay ? `${value}T00:00` : value);
   const today = new Date();
   const diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
   const day = diff === 0 ? "오늘" : diff === 1 ? "내일" : `${d.getMonth() + 1}월 ${d.getDate()}일 (${WEEKDAY[d.getDay()]})`;
-  return `${day} ${time(d)}`;
+  return allDay ? day : `${day} ${time(d)}`;
 }
 
 /**
- * 마감 고르기. value는 'YYYY-MM-DDTHH:MM' (없으면 "").
- * 자주 쓰는 날은 한 번에(오늘·내일·주말·다음 주), 나머지는 달력, 시간은 버튼이나 직접 입력.
+ * 마감 고르기. value는 'YYYY-MM-DD'(하루 종일) 또는 'YYYY-MM-DDTHH:MM' (없으면 "").
+ * 자주 쓰는 날은 한 번에(오늘·내일·주말·다음 주), 나머지는 달력. 날짜만 고르면 하루 종일이고,
+ * 시간은 필요할 때만 버튼이나 직접 입력으로 붙인다.
  */
 export function DuePicker({ value, onChange }) {
   const p = usePopover();
   const now = new Date();
   const todayKey = ymd(now);
-  const [dateKey, timeKey] = value ? value.split("T") : ["", ""];
+  const [dateKey, timeKey = ""] = value ? value.split("T") : ["", ""];
   const [month, setMonth] = useState((dateKey || todayKey).slice(0, 7));
   const [typed, setTyped] = useState("");
 
@@ -99,15 +101,9 @@ export function DuePicker({ value, onChange }) {
     p.setOpen(!p.open);
   };
 
-  // 날짜만 고르면 시간은 쓰던 값을 유지, 없으면 오전 9시 (오늘인데 이미 지났으면 오후 6시 → 그것도 지났으면 23:59)
-  const defaultTime = (key) => {
-    if (timeKey) return timeKey;
-    if (key !== todayKey) return "09:00";
-    const hhmm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
-    return hhmm < "09:00" ? "09:00" : hhmm < "18:00" ? "18:00" : "23:59";
-  };
+  // 날짜를 바꿔도 고른 시간은 유지. 시간을 고른 적이 없으면 하루 종일
   const pickDate = (key) => {
-    onChange(`${key}T${defaultTime(key)}`);
+    onChange(timeKey ? `${key}T${timeKey}` : key);
     setMonth(key.slice(0, 7));
   };
   const pickTime = (t) => onChange(`${dateKey || todayKey}T${t}`);
@@ -192,7 +188,14 @@ export function DuePicker({ value, onChange }) {
           </div>
 
           <div className="mt-2 border-t border-line pt-2">
-            <div className="grid grid-cols-5 gap-1">
+            <div className="grid grid-cols-3 gap-1">
+              <button
+                type="button"
+                onClick={() => onChange(dateKey || todayKey)}
+                className={`rounded-md py-0.5 text-center text-[11px] ${dateKey && !timeKey ? "bg-accent text-white" : "bg-field hover:bg-selected"}`}
+              >
+                하루 종일
+              </button>
               {TIMES.map(([t, label]) => (
                 <button
                   key={t}
@@ -228,6 +231,35 @@ export function DuePicker({ value, onChange }) {
             <button type="button" onClick={() => p.setOpen(false)} className="btn-plain text-[12px] !text-accent">완료</button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** 누르면 바로 실행되는 작은 메뉴. items: [{ label, hint?, onSelect }] */
+export function Menu({ label, items, children, className = "", align = "left" }) {
+  const p = usePopover();
+  return (
+    <div ref={p.ref} onKeyDown={p.onKeyDown} className="relative">
+      <button type="button" aria-label={label} aria-haspopup="menu" aria-expanded={p.open} onClick={() => p.setOpen(!p.open)} className={className}>
+        {children}
+      </button>
+      {p.open && (
+        <ul role="menu" aria-label={label} className={`${popover} min-w-[150px] !p-1 ${align === "right" ? "!left-auto right-0" : ""}`}>
+          {items.map((it) => (
+            <li key={it.label}>
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => { p.setOpen(false); it.onSelect(); }}
+                className="group/item flex w-full items-center justify-between gap-4 rounded-md px-2 py-1 text-left hover:bg-accent hover:text-white"
+              >
+                {it.label}
+                {it.hint && <span className="num text-[11px] text-mute group-hover/item:text-white/75">{it.hint}</span>}
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );

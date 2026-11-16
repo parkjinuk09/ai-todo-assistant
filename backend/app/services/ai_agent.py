@@ -19,7 +19,9 @@ SYSTEM_PROMPT = """너는 사용자의 개인 투두 비서야.
 - 사용자가 할 일을 말하면 반드시 도구를 호출해서 직접 추가/수정/완료/삭제해. 도구 호출을 글로 흉내 내지 마.
 - 수정·완료·삭제할 때는 아래 '지금 할 일' 목록의 id를 써. 목록에 없을 때만 list_todos로 찾아.
 - 날짜는 아래 달력을 보고 'YYYY-MM-DDTHH:MM' 형식으로 넣어. 시간을 말 안 했으면 날짜만 넣어.
-- 메시지 끝에 '(날짜 참고: …)'가 있으면 그 날짜를 계산하지 말고 그대로 써.
+- 메시지 끝에 '(날짜 참고: …)'가 있으면 그 날짜를 계산하지 말고 그대로 써. 답변에는 '(날짜 참고…)'를 옮겨 적지 마.
+- "매일/평일마다/매주/매달"처럼 되풀이되는 일은 repeat에 daily/weekdays/weekly/monthly 중 하나를 넣어. 반복을 없애 달라고 하면 repeat="none".
+- 같은 할 일을 두 번 추가하지 마.
 - 할 일을 물어보면 [지금 할 일]에서 해당 묶음의 제목과 시간을 나열해. 날짜를 직접 계산하지 말고, id는 말하지 마.
 - category는 공부/일/개인/건강/기타 중 하나. priority는 사용자가 "중요/급해"라고 하면 1, "나중에/급하지 않아"라고 하면 3, 아무 말 없으면 넣지 마.
 - 반드시 한국어로만 답해.
@@ -96,7 +98,8 @@ def _pending_snapshot(db: Session, now: datetime) -> str:
         d = todo_service._aware(t.due_at)
         diff = (d.date() - now.date()).days
         key = "마감 지남" if d < now and diff < 0 else {0: "오늘 마감", 1: "내일 마감", 2: "모레 마감"}.get(diff, "그 뒤")
-        groups[key].append(f"  - {t.title} ({d:%m-%d} {WEEKDAYS[d.weekday()]} {d:%H:%M}) [id={t.id}]")
+        when = f"{d:%m-%d} {WEEKDAYS[d.weekday()]}" + ("" if t.all_day else f" {d:%H:%M}")
+        groups[key].append(f"  - {t.title} ({when}{', 반복' if t.repeat else ''}) [id={t.id}]")
     return "\n".join(f"{k}: " + ("없음" if not v else "\n" + "\n".join(v)) for k, v in groups.items())
 
 
@@ -111,6 +114,9 @@ def _clean_reply(text: str) -> str:
     if han:
         cut = min(cut, han.start())
     kept = text[:cut]
+    kept = re.sub(r"\s*[(（]\s*날짜 참고[^)）]*[)）]", "", kept)  # 서버가 붙여 준 날짜 힌트를 그대로 옮긴 것
+    kept = re.sub(r"(\d{4})-(\d{2})-(\d{2})T\d{2}:\d{2}(?::\d{2})?(?:[+-]\d{2}:\d{2}|Z)?",
+                  lambda m: f"{int(m.group(2))}월 {int(m.group(3))}일", kept)  # ISO 날짜는 사람이 읽는 말로
     kept = re.sub(r"\s*[\[(]\s*(?:id\s*[:=]\s*)?\d{3,}\s*[\])]", "", kept)  # "(id: 3)", "[18940]"
     kept = re.sub(r"[<\[](마감 지남|오늘 마감|내일 마감|모레 마감|그 뒤|마감 없음)[>\]]", r"\1", kept)
     lines = [ln for ln in kept.splitlines() if "id=" not in ln]
@@ -129,6 +135,19 @@ def _parse_dt(value: str | None) -> datetime | None:
     return dt if dt.tzinfo else dt.replace(tzinfo=settings.tz)
 
 
+def _parse_due(value: str | None) -> tuple[datetime | None, bool]:
+    """(마감, 하루 종일 여부). 날짜만 왔거나 0시 정각이면 시간을 말하지 않은 것으로 본다."""
+    dt = _parse_dt(value)
+    if dt is None:
+        return None, False
+    if len(value.strip()) == 10 or (dt.hour, dt.minute) == (0, 0):
+        return dt.replace(hour=23, minute=59), True
+    return dt, False
+
+
+REPEATS = ("daily", "weekdays", "weekly", "monthly")
+
+
 def _fn(name: str, description: str, properties: dict, required: list[str] | None = None) -> dict:
     return {"type": "function", "function": {
         "name": name, "description": description,
@@ -144,13 +163,17 @@ TOOL_SCHEMAS = [
         "due_at": {"type": "string", "description": "마감 일시 ISO 8601, 없으면 생략"},
         "category": {"type": "string", "enum": ["공부", "일", "개인", "건강", "기타"]},
         "priority": {"type": "integer", "description": "사용자가 중요하다고 했을 때만 1, 나중에 해도 된다고 했을 때만 3. 그 외엔 생략"},
+        "repeat": {"type": "string", "enum": list(REPEATS), "description": "되풀이되는 일일 때만"},
+        "note": {"type": "string", "description": "메모 (링크, 준비물 등). 없으면 생략"},
     }, ["title"]),
-    _fn("update_todo", "할 일의 제목/마감/카테고리/우선순위를 수정한다. 바꿀 값만 보낸다.", {
+    _fn("update_todo", "할 일의 제목/마감/카테고리/우선순위/반복/메모를 수정한다. 바꿀 값만 보낸다.", {
         "todo_id": {"type": "integer"},
         "title": {"type": "string"},
         "due_at": {"type": "string"},
         "category": {"type": "string"},
         "priority": {"type": "integer"},
+        "repeat": {"type": "string", "enum": [*REPEATS, "none"]},
+        "note": {"type": "string"},
     }, ["todo_id"]),
     _fn("complete_todo", "할 일을 완료 처리한다.", {"todo_id": {"type": "integer"}}, ["todo_id"]),
     _fn("delete_todo", "할 일을 삭제한다.", {"todo_id": {"type": "integer"}}, ["todo_id"]),
@@ -175,17 +198,37 @@ def build_tools(db: Session, actions: list[str], allow_priority: bool = True) ->
             for t in todos
         ]
 
-    def add_todo(title: str, due_at: str | None = None, category: str = "기타", priority: int = 2) -> dict:
+    def add_todo(title: str, due_at: str | None = None, category: str = "기타", priority: int = 2,
+                 repeat: str | None = None, note: str = "") -> dict:
+        due, all_day = _parse_due(due_at)
+        title = title.strip()
+        # 작은 모델은 같은 추가를 두 번 부르기도 하고, 사용자가 같은 말을 두 번 보내기도 한다
+        for t in todo_service.list_todos(db, done=False):
+            same_due = (t.due_at is None and due is None) or (
+                t.due_at is not None and due is not None and todo_service._aware(t.due_at) == due)
+            if t.title == title and same_due:
+                if not any(a.endswith(f": {title}") for a in actions):
+                    actions.append(f"이미 있음: {title}")
+                return {"id": t.id, "title": t.title, "already_exists": True}
         todo = todo_service.create_todo(
-            db, TodoCreate(title=title, due_at=_parse_dt(due_at), category=category,
-                           priority=_prio(priority) or 2))
+            db, TodoCreate(title=title, due_at=due, all_day=all_day, category=category,
+                           priority=_prio(priority) or 2, repeat=repeat if repeat in REPEATS else None,
+                           note=note or ""))
         actions.append(f"추가: {todo.title}")
         return {"id": todo.id, "title": todo.title}
 
     def update_todo(todo_id: int, title: str | None = None, due_at: str | None = None,
-                    category: str | None = None, priority: int | None = None) -> dict:
-        patch = {k: v for k, v in {"title": title, "due_at": _parse_dt(due_at), "category": category,
-                                   "priority": _prio(priority)}.items() if v}
+                    category: str | None = None, priority: int | None = None,
+                    repeat: str | None = None, note: str | None = None) -> dict:
+        due, all_day = _parse_due(due_at)
+        patch = {k: v for k, v in {"title": title, "due_at": due, "category": category,
+                                   "priority": _prio(priority), "note": note}.items() if v}
+        if due:
+            patch["all_day"] = all_day
+        if repeat in REPEATS:
+            patch["repeat"] = repeat
+        elif repeat == "none":
+            patch["repeat"] = None
         todo = todo_service.update_todo(db, todo_id, TodoUpdate(**patch))
         actions.append(f"수정: {todo.title}")
         return {"id": todo.id, "title": todo.title}
@@ -236,7 +279,8 @@ def answer_query(db: Session, message: str, now: datetime) -> str:
         if not t.due_at:
             return t.title
         d = local(t)
-        return f"{t.title} ({d:%m/%d} {WEEKDAYS[d.weekday()]} {d:%H:%M})" if with_date else f"{t.title} {d:%H:%M}"
+        clock = "" if t.all_day else f" {d:%H:%M}"
+        return f"{t.title} ({d:%m/%d} {WEEKDAYS[d.weekday()]}{clock})" if with_date else f"{t.title}{clock}"
 
     days = [d for _, d in date_hints.resolve(message, now.date())]
     if days:
@@ -258,6 +302,43 @@ def answer_query(db: Session, message: str, now: datetime) -> str:
     return "\n".join(lines)
 
 
+DELETE_WORDS = re.compile(r"삭제|지워|지우|없애|빼\s?줘")
+DONE_WORDS = re.compile(r"완료|끝났|끝냈|다\s?했|했어|했음")
+OTHER_CHANGE = re.compile(r"추가|넣어|등록|바꿔|수정|변경|옮겨|미뤄|말고|대신")
+FILLER = re.compile(r"해\s?줘|해줄래|줘|좀|처리|할 일|[을를은는이가]\s|[.!?~]")
+MEANINGFUL = re.compile(r"[가-힣A-Za-z0-9]")
+
+
+def quick_command(db: Session, message: str) -> tuple[str, list[str]] | None:
+    """'치과 예약 삭제', '빨래 완료'처럼 제목이 분명한 삭제·완료는 LLM 없이 바로 처리한다.
+    빠른 입력창에서 몇 초씩 기다리지 않게 하고, 작은 모델이 엉뚱한 항목을 고르는 일도 막는다.
+    확실하지 않으면 None을 돌려 LLM에게 넘긴다."""
+    delete, done = DELETE_WORDS.search(message), DONE_WORDS.search(message)
+    if bool(delete) == bool(done) or OTHER_CHANGE.search(message):
+        return None
+    word = delete or done
+    key = FILLER.sub(" ", message[:word.start()] + " " + message[word.end():] + " ")
+    key = re.sub(r"\s+", "", key)
+    if len(key) < 2:
+        return None
+    squash = lambda text: re.sub(r"\s+", "", text)  # noqa: E731
+    pending = todo_service.list_todos(db, done=False)
+    hits = [t for t in pending if key in squash(t.title) or squash(t.title) in key]
+    exact = [t for t in hits if squash(t.title) == key]
+    hits = exact or hits
+    if not hits:
+        return None
+    if len(hits) > 1:
+        names = ", ".join(t.title for t in hits[:5])
+        return f"어느 걸 말하는지 모르겠어: {names}. 제목을 더 정확히 말해 줘.", []
+    todo = hits[0]
+    if delete:
+        todo_service.delete_todo(db, todo.id)
+        return f"'{todo.title}' 삭제했어.", [f"삭제: {todo.title}"]
+    todo_service.update_todo(db, todo.id, TodoUpdate(done=True))
+    return f"'{todo.title}' 완료했어.", [f"완료: {todo.title}"]
+
+
 CLAIMS_CHANGE = re.compile(r"(추가|완료|삭제|변경|수정|바꿨|바꾸었|옮겼)")
 NUDGE = "방금 도구를 호출하지 않고 말로만 답했어. 실제로 바꾸려면 반드시 도구를 호출해. 바꿀 게 없으면 그렇다고만 말해."
 
@@ -266,11 +347,19 @@ def chat(db: Session, message: str) -> tuple[str, list[str]]:
     """대화 기록은 넣지 않는다: 작은 모델은 기록 속 '추가했어' 답을 보고 도구 없이 말만 따라 한다.
     대신 매 요청마다 남은 할 일 스냅샷을 넣어 '그거 완료' 같은 지칭도 해결한다."""
     now = datetime.now(settings.tz)
-    if is_query(message):
-        reply = answer_query(db, message, now)
+
+    def answer(reply: str, actions: list[str]) -> tuple[str, list[str]]:
         db.add_all([ChatMessage(role="user", content=message), ChatMessage(role="assistant", content=reply)])
         db.commit()
-        return reply, []
+        return reply, actions
+
+    if not MEANINGFUL.search(message):  # "ㄴㅇㄹ" 같은 입력에 모델이 아무 할 일이나 고치는 걸 막는다
+        return answer("무슨 말인지 잘 모르겠어. 다시 말해 줄래?", [])
+    if is_query(message):
+        return answer(answer_query(db, message, now), [])
+    quick = quick_command(db, message)
+    if quick:
+        return answer(*quick)
 
     client = _client()
     d1, d2 = now.date() + timedelta(days=1), now.date() + timedelta(days=2)
