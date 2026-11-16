@@ -9,6 +9,9 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: "autoUpdate",
+      // 맥 로컬 설치용 빌드: 서비스 워커가 옛 화면을 캐시에서 먼저 보여 주므로 끈다.
+      // selfDestroying은 이미 등록된 워커와 캐시까지 지운다.
+      selfDestroying: process.env.LOCAL_APP === "1",
       includeAssets: ["favicon.png"],
       manifest: {
         name: "할 일",
